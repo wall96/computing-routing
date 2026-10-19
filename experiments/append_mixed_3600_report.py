@@ -183,7 +183,7 @@ def audit_data(scenarios=(1,2,3),save=True):
                 physical=json.loads(json.dumps(cfg))
                 for k in ('scenario_shells','scenario_geo','scenario_ground','scenario_max_concurrency'):
                     physical['constellation'][k]={int(k2):v for k2,v in physical['constellation'][k].items()}
-                sim=Simulator(physical,scenario=sc,no_scale=True)
+                sim=Simulator(physical,scenario=sc)
                 cache={}
                 for tid,life in candidates:
                     raw=demand[tid]

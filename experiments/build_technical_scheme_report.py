@@ -733,7 +733,7 @@ def main():
     from network import build_snapshot
     counts={}
     for sc in (1,2,3):
-        sim=Simulator(cfg,scenario=sc,no_scale=True);snap=build_snapshot(0,sim.all_nodes,cfg,sc)
+        sim=Simulator(cfg,scenario=sc);snap=build_snapshot(0,sim.all_nodes,cfg,sc)
         counts[sc]=dict(nodes=len(snap.nodes),links=len(snap.links),types=dict(Counter(n.type.value for n in snap.nodes.values())))
     assert [counts[sc]['nodes'] for sc in (1,2,3)]==[500,528,1006]
     data=datasets();checks=verify_data(data);node_audit=review_node_statistics(data)

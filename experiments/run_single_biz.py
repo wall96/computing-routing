@@ -48,7 +48,6 @@ def main():
     ap.add_argument("--t-end", type=float, default=None)
     ap.add_argument("--slot", type=float, default=None)
     ap.add_argument("--seed", type=int, default=None)
-    ap.add_argument("--no-scale", action="store_true")
     ap.add_argument("--businesses", default=",".join(BIZ_TYPES),
                     help="要运行的业务列表，默认 LL,HR,HC,MC")
     ap.add_argument("--ll-dst-knn", type=int, default=None,
@@ -126,16 +125,13 @@ def main():
             cfg["traffic"]["qos"]["LL"]["dst_knn"] = args.ll_dst_knn
 
         print(f"运行单业务 {biz}: duration={slot:g}s ...", flush=True)
-        sim = Simulator(cfg, scenario=scenario, strategy=strategy, solver=solver,
-                        no_scale=args.no_scale)
+        sim = Simulator(cfg, scenario=scenario, strategy=strategy, solver=solver)
         metrics = run_silently(sim)
         run_out = out / biz
         metrics.meta["algorithm_diagnostics"] = getattr(sim.solver, "diagnostics", {})
         metrics.export(str(run_out))
         effective_cfg = json.loads(json.dumps(cfg))
         effective_cfg["simulation"].update(scenario=scenario, strategy=strategy, solver=solver)
-        if args.no_scale:
-            effective_cfg["scale"]["enabled"] = False
         with open(run_out / "effective_config.json", "w", encoding="utf-8") as f:
             json.dump(effective_cfg, f, ensure_ascii=False, indent=2)
         s = metrics.summary()

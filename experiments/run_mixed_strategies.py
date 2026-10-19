@@ -173,7 +173,7 @@ def run(strategy,sc,out,baseline):
     schedule_source=source/'arrival_schedule.csv'
     # Regenerate the CSV from the saved arrival schedule, without sampling again.
     write_csv(path/'arrival_schedule.csv',read(schedule_source))
-    sim=Simulator(cfg,scenario=sc,strategy=strategy,solver='S1',no_scale=True)
+    sim=Simulator(cfg,scenario=sc,strategy=strategy,solver='S1')
     sim.metrics.meta.update(mixed_variant='variable_random',mixed_ratio={'LL':3,'HR':2,'HC':3,'MC':1},
         paired_baseline=str(source.resolve()))
     metrics=sim.run();metrics.export(str(path));extra_outputs(sim,path)

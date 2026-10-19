@@ -17,7 +17,6 @@ def parse_args():
     p.add_argument("--t-end", type=float, default=None)
     p.add_argument("--slot", type=float, default=None)
     p.add_argument("--seed", type=int, default=None)
-    p.add_argument("--no-scale", action="store_true")
     p.add_argument("--out", default="results")
     return p.parse_args()
 
@@ -38,7 +37,7 @@ def main():
     logging.basicConfig(level=cfg["simulation"].get("log_level", "INFO"))
 
     sim = Simulator(cfg, scenario=args.scenario, strategy=args.strategy,
-                    solver=args.solver, no_scale=args.no_scale)
+                    solver=args.solver)
     metrics = sim.run()
     metrics.export(args.out)
     print(f"\n结果已保存至: {args.out}/")

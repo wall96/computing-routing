@@ -1,7 +1,6 @@
 # ============================================================
 # 星地协同算力路由仿真配置 (v5)
-# 对应《项目总体设计文档.md》§12。默认是"缩比快速跑通"配置;
-# 正式全规模跑改 scale.enabled=false。
+# 对应《项目总体设计文档.md》§12。星座始终全量构建(不缩比)。
 # ============================================================
 
 simulation:
@@ -15,10 +14,12 @@ simulation:
   log_level: INFO
 
 # ===================== 星座(多壳层 Walker) =====================
+# Walker i:T/P/F。pattern=delta:RAAN 在 360° 均布(倾斜轨道);star:RAAN 在 180° 均布(近极轨道,
+# 若用 delta 则升/降轨面两两重合)。
 constellation:
   shells:
-    - {name: L1, planes: 20, per_plane: 25, alt_km: 550,  inc_deg: 53, phase: 1}   # 500
-    - {name: L2, planes: 20, per_plane: 25, alt_km: 1100, inc_deg: 87, phase: 1}   # 500
+    - {name: L1, planes: 20, per_plane: 25, alt_km: 550,  inc_deg: 53, phase: 1, pattern: delta}  # 53°:500/20/1
+    - {name: L2, planes: 20, per_plane: 25, alt_km: 1100, inc_deg: 87, phase: 1, pattern: star}   # 87°:500/20/1
   geo:
     count: 6
     longitudes_deg: [0, 60, 120, 180, -120, -60]
@@ -147,7 +148,8 @@ traffic:
   # satellite: 源和目的均为卫星(旧默认); ground: 固定ACCESS地面站
   endpoint_mode: terminal
   terminal:
-    lat_range_deg: [-60, 60]    # 终端纬度带(按面积均匀撒点);L1倾角53°,更高纬覆盖稀疏
+    lat_range_deg: [-55, 55]    # 终端纬度带(按面积均匀撒点)。L1 53° Delta 实测:带内覆盖≈99.8%
+                                # (赤道附近零星瞬时空洞),纬度60°处降至≈92%,65°以上无覆盖
     lon_range_deg: [-180, 180]
     dst_max_km:                 # 目的终端距源的大圆距离上限;未列出的业务全球均匀抽取
       LL: 2000                  # 20 ms 预算:上下行+ISL需留余量
@@ -184,8 +186,3 @@ algorithm:
   larac_max_iter: 20             # S3 迭代上限
   aco: {ants: 8, iters: 8, alpha: 1.0, beta: 2.0, evap: 0.3, q: 1.0}
   milp: {max_nodes: 80, max_tasks_per_slot: 15}   # S5 仅小规模
-
-# ===================== 规模缩放(联调用) =====================
-scale:
-  enabled: true
-  plane_cap: 6         # 缩比:每壳层最多 6 个平面(保持每面 20 颗→ISL 可见);--no-scale 时忽略

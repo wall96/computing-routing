@@ -13,7 +13,7 @@ from solvers import make_solver
 
 
 class Simulator:
-    def __init__(self, cfg: dict, scenario=None, strategy=None, solver=None, no_scale=False):
+    def __init__(self, cfg: dict, scenario=None, strategy=None, solver=None):
         self.cfg = cfg
         self.sim = cfg["simulation"]
         self.scenario = int(scenario if scenario is not None else self.sim["scenario"])
@@ -22,7 +22,6 @@ class Simulator:
         self.slot = float(self.sim["slot_sec"])
         self.t_start = float(self.sim["t_start_sec"])
         self.t_end = float(self.sim["t_end_sec"])
-        self.no_scale = no_scale
         self.max_concurrency = int(cfg["constellation"].get(
             "scenario_max_concurrency", {}).get(self.scenario, 0))
 
@@ -43,13 +42,9 @@ class Simulator:
         cap = self.cfg["compute_capacity_tflops"]
         eta = self.cfg["energy_compute_eta_J_per_cycle"]
         pw = self.cfg["compute_power_budget_W"]
-        scale = self.cfg.get("scale", {})
-        cap_pp = None
-        if scale.get("enabled", True) and not self.no_scale:
-            cap_pp = scale.get("plane_cap")
         nodes: List[Node] = []
         for shell in self.cfg["constellation"]["shells"]:
-            nodes += build_shell(shell, cap["LEO"], eta["LEO"], pw["LEO"], cap_pp)
+            nodes += build_shell(shell, cap["LEO"], eta["LEO"], pw["LEO"])
         geo = self.cfg["constellation"]["geo"]
         nodes += build_geo(geo["longitudes_deg"], cap["GEO"], eta["GEO"], pw["GEO"])
         nodes += build_ground(self.cfg["ground"]["stations"], cap, eta, pw)

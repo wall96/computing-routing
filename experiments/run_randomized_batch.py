@@ -139,7 +139,7 @@ def run(out,sc,strategy):
     cfg['simulation'].update(strategy=strategy,event_output_dir=str(path.resolve()))
     dump(path/'effective_config.json',cfg)
     write_csv(path/'arrival_schedule.csv',read(case/'arrival_schedule.csv'))
-    sim=Simulator(cfg,scenario=sc,strategy=strategy,solver='S1',no_scale=True)
+    sim=Simulator(cfg,scenario=sc,strategy=strategy,solver='S1')
     sim.metrics.meta.update(mixed_variant='fresh_bounded_random',mixed_ratio=WEIGHTS,
         random_batch_id=manifest['batch_id'],master_seed=manifest['master_seed'])
     m=sim.run();m.export(str(path));summary=extra_outputs(sim,path)
@@ -184,7 +184,7 @@ def finalize_exported_run(out,sc,strategy):
     extra_outputs(SimpleNamespace(metrics=metrics,slot=30,t_end=3600,t_start=0,scenario=sc),path)
     # Replay only the generator, not any allocation decision, to recover sampled durations.
     cfg=restore_keys(json.loads((path/'effective_config.json').read_text(encoding='utf-8')))
-    sim=Simulator(cfg,scenario=sc,strategy=strategy,solver='S1',no_scale=True)
+    sim=Simulator(cfg,scenario=sc,strategy=strategy,solver='S1')
     replay=[]
     for i in range(120):
         replay.extend(sim.gen.gen_for_slot(i*30,i,build_snapshot(i*30,sim.all_nodes,cfg,sc)))
@@ -239,7 +239,7 @@ def summarize_batch(out):
             result_audits.append(audit)
             dump(path/'comparison_audit.json',audit)
             generated=[number(r) for r in read(path/'generated_tasks.csv')]
-            node_types={n.id:n.type.value for n in Simulator(restore_keys(json.loads(json.dumps(actual))),scenario=sc,no_scale=True).all_nodes}
+            node_types={n.id:n.type.value for n in Simulator(restore_keys(json.loads(json.dumps(actual))),scenario=sc).all_nodes}
             case=next(c for c in manifest['cases'] if c['scenario']==sc and c['strategy']==st)
             assert abs(sum(r['duration_s'] for r in generated)/3600-case['offered_time_avg_active'])<1e-7
             for biz in ('ALL','LL','HR','HC','MC'):

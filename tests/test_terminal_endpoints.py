@@ -90,6 +90,32 @@ class CoverageTest(unittest.TestCase):
         self.assertEqual(Simulator.reject_reason(self.snap, task), 'src_no_coverage')
 
 
+class WalkerConstellationTest(unittest.TestCase):
+    def test_full_scale_delta_and_star(self):
+        cfg = load_cfg()
+        sim = Simulator(cfg, scenario=3)
+        for shell in cfg['constellation']['shells']:
+            sats = [n for n in sim.all_nodes if n.shell == shell['name']]
+            self.assertEqual(len(sats), shell['planes'] * shell['per_plane'])   # 不缩比
+            raans = sorted({round(math.degrees(n.orbit_raan_rad), 6) for n in sats})
+            span = 360.0 if shell['pattern'] == 'delta' else 180.0
+            self.assertEqual(len(raans), shell['planes'])
+            self.assertAlmostEqual(raans[1] - raans[0], span / shell['planes'])
+
+    def test_terminal_band_coverage_in_scenario1(self):
+        # 20×25 Walker Delta 在赤道附近有零星瞬时空洞,纬度带内按面积应 ≥99% 有覆盖
+        cfg = load_cfg()
+        sim = Simulator(cfg, scenario=1)
+        gen = TaskGenerator(cfg['traffic'], [], 30, seed=11)
+        hit = n = 0
+        for t in (0, 900, 1800):
+            snap = build_snapshot(t, sim.all_nodes, cfg, 1)
+            for _ in range(300):
+                lat, lon = gen._random_ground_point()
+                hit += bool(satellite_coverage(snap, lat, lon, cfg)); n += 1
+        self.assertGreaterEqual(hit / n, 0.99)
+
+
 class NoTerminalTransitTest(unittest.TestCase):
     def test_solvers_never_relay_through_terminal(self):
         cfg = load_cfg()

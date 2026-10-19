@@ -43,7 +43,7 @@ class BoundedTaskTest(unittest.TestCase):
         cfg['traffic']['qos']['LL']['duration_s']=[600,600]
         with tempfile.TemporaryDirectory() as tmp:
             cfg['simulation']['event_output_dir']=tmp
-            sim=TinySimulator(cfg,scenario=1,no_scale=True)
+            sim=TinySimulator(cfg,scenario=1)
             with patch('event_simulation.build_snapshot',side_effect=tiny_snapshot),redirect_stdout(io.StringIO()):
                 m=sim.run();m.export(tmp)
             self.assertEqual(len(m.attempts),2)

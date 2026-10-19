@@ -45,15 +45,21 @@ def _make_sat(sid, shell, plane, s_idx, a_m, inc, raan, M0, n,
     )
 
 
-def build_shell(shell_cfg: dict, cap_tflops: float, eta: float, power_budget: float,
-                plane_cap: int = None) -> List[Node]:
-    """一个壳层的 Walker 星座。plane_cap 缩比时限制平面数(保持每面密度→ISL 可见)。"""
+def build_shell(shell_cfg: dict, cap_tflops: float, eta: float, power_budget: float) -> List[Node]:
+    """一个壳层的 Walker 星座 i:T/P/F(全量,不缩比)。
+
+    pattern=delta(默认):RAAN 在 [0,360) 均布,Ω_p = 2πp/P,适合倾斜轨道;
+    pattern=star:RAAN 在 [0,180) 均布,Ω_p = πp/P,适合近极轨道。
+    相位:M₀(p,s) = 2πs/S + 2πF·p/T。
+    """
     name = shell_cfg["name"]
     planes = int(shell_cfg["planes"])
     per_plane = int(shell_cfg["per_plane"])
-    if plane_cap:
-        planes = min(planes, plane_cap)
     phase_F = int(shell_cfg.get("phase", 1))
+    pattern = str(shell_cfg.get("pattern", "delta")).lower()
+    if pattern not in ("delta", "star"):
+        raise ValueError(f"壳层 {name}: 未知 Walker pattern {pattern}")
+    raan_span = 2 * math.pi if pattern == "delta" else math.pi
     inc = _deg2rad(shell_cfg["inc_deg"])
     a = R_EARTH_M + shell_cfg["alt_km"] * 1000.0
     n = math.sqrt(MU_EARTH / (a ** 3))
@@ -62,7 +68,7 @@ def build_shell(shell_cfg: dict, cap_tflops: float, eta: float, power_budget: fl
     nodes: List[Node] = []
     total = planes * per_plane
     for p in range(planes):
-        raan = math.pi * p / planes                 # Walker Star: RAAN ∈ [0,180)
+        raan = raan_span * p / planes
         for s in range(per_plane):
             M0 = (2 * math.pi * s / per_plane + 2 * math.pi * phase_F * p / total) % (2 * math.pi)
             sid = f"{name}-{p:02d}-{s:02d}"

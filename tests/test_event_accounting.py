@@ -42,7 +42,7 @@ class EventAccountingTest(unittest.TestCase):
         tasks=[demand('A',5,8),demand('B',14,20),demand('C',16,2),demand('D',42,40)]
         with tempfile.TemporaryDirectory() as out:
             cfg['simulation']['event_output_dir']=out
-            sim=TinySimulator(cfg,scenario=1,no_scale=True)
+            sim=TinySimulator(cfg,scenario=1)
             class Generator:
                 def gen_for_slot(self,t,i,snapshot=None):
                     return [x for x in tasks if t<=x.arrival_t<t+30]

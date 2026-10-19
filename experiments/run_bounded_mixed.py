@@ -87,7 +87,7 @@ def run(strategy,sc,out):
     cfg['traffic']['truncate_at_simulation_end']=True
     (path/'effective_config.json').write_text(json.dumps(cfg,ensure_ascii=False,indent=2),encoding='utf-8')
     write_csv(path/'arrival_schedule.csv',read(source/'arrival_schedule.csv'))
-    sim=Simulator(cfg,scenario=sc,strategy=strategy,solver='S1',no_scale=True)
+    sim=Simulator(cfg,scenario=sc,strategy=strategy,solver='S1')
     sim.metrics.meta.update(mixed_variant='bounded_random',mixed_ratio={'LL':3,'HR':2,'HC':3,'MC':1},
         task_end_policy='duration=min(sampled_duration,simulation_end-arrival)',source_input=str(source.resolve()))
     m=sim.run();m.export(str(path));summary=extra_outputs(sim,path)
