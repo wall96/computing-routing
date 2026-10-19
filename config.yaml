@@ -1,0 +1,182 @@
+# ============================================================
+# 星地协同算力路由仿真配置 (v5)
+# 对应《项目总体设计文档.md》§12。默认是"缩比快速跑通"配置;
+# 正式全规模跑改 scale.enabled=false。
+# ============================================================
+
+simulation:
+  scenario: 1            # 1: 500 LEO | 2: 500 LEO+EDGE+DC | 3: 2x500 LEO+6 GEO
+  strategy: latency      # latency | balance | energy  (每次只用一个)
+  solver: S1             # S0 | S1 | S2 | S3 | S4 | S5
+  t_start_sec: 0
+  t_end_sec: 3600        # 60 min
+  slot_sec: 30
+  random_seed: 42
+  log_level: INFO
+
+# ===================== 星座(多壳层 Walker) =====================
+constellation:
+  shells:
+    - {name: L1, planes: 20, per_plane: 25, alt_km: 550,  inc_deg: 53, phase: 1}   # 500
+    - {name: L2, planes: 20, per_plane: 25, alt_km: 1100, inc_deg: 87, phase: 1}   # 500
+  geo:
+    count: 6
+    longitudes_deg: [0, 60, 120, 180, -120, -60]
+  # 每场景启用哪些壳层 + 是否启用 GEO / 地面算力
+  scenario_shells:
+    1: [L1]
+    2: [L1]
+    3: [L1, L2]
+  scenario_geo:    {1: false, 2: false, 3: true}
+  scenario_ground: {1: none, 2: compute_only, 3: none}
+  scenario_max_concurrency: {1: 200, 2: 250, 3: 500}
+  allow_cross_shell_isl: true
+
+# ===================== 地面 50 城市 =====================
+ground:
+  use_dc: true           # 启用地面DC，作为星上业务可选算力节点（不作为业务端点）
+  stations:
+    # ---- 中国 15 ----
+    - {name: BEIJING,    lat: 39.9,  lon: 116.4,  type: DC}
+    - {name: SHANGHAI,   lat: 31.2,  lon: 121.5,  type: DC}
+    - {name: GUANGZHOU,  lat: 23.1,  lon: 113.3,  type: DC}
+    - {name: CHENGDU,    lat: 30.6,  lon: 104.1,  type: DC}
+    - {name: SHENZHEN,   lat: 22.5,  lon: 114.1,  type: EDGE}
+    - {name: WUHAN,      lat: 30.6,  lon: 114.3,  type: EDGE}
+    - {name: HANGZHOU,   lat: 30.3,  lon: 120.2,  type: EDGE}
+    - {name: XIAN,       lat: 34.3,  lon: 108.9,  type: EDGE}
+    - {name: CHONGQING,  lat: 29.6,  lon: 106.5,  type: EDGE}
+    - {name: NANJING,    lat: 32.0,  lon: 118.8,  type: ACCESS}
+    - {name: TIANJIN,    lat: 39.1,  lon: 117.2,  type: ACCESS}
+    - {name: SHENYANG,   lat: 41.8,  lon: 123.4,  type: ACCESS}
+    - {name: HONGKONG,   lat: 22.3,  lon: 114.2,  type: ACCESS}
+    - {name: URUMQI,     lat: 43.8,  lon: 87.6,   type: ACCESS}
+    - {name: LHASA,      lat: 29.7,  lon: 91.1,   type: ACCESS}
+    # ---- 美国 12 ----
+    - {name: NEWYORK,    lat: 40.7,  lon: -74.0,  type: DC}
+    - {name: LOSANGELES, lat: 34.0,  lon: -118.2, type: DC}
+    - {name: SANFRAN,    lat: 37.8,  lon: -122.4, type: DC}
+    - {name: CHICAGO,    lat: 41.9,  lon: -87.6,  type: EDGE}
+    - {name: SEATTLE,    lat: 47.6,  lon: -122.3, type: EDGE}
+    - {name: DALLAS,     lat: 32.8,  lon: -96.8,  type: EDGE}
+    - {name: WASHINGTON, lat: 38.9,  lon: -77.0,  type: EDGE}
+    - {name: MIAMI,      lat: 25.8,  lon: -80.2,  type: ACCESS}
+    - {name: ATLANTA,    lat: 33.7,  lon: -84.4,  type: ACCESS}
+    - {name: BOSTON,     lat: 42.4,  lon: -71.1,  type: ACCESS}
+    - {name: HOUSTON,    lat: 29.8,  lon: -95.4,  type: ACCESS}
+    - {name: DENVER,     lat: 39.7,  lon: -104.9, type: ACCESS}
+    # ---- 其他国家 23 ----
+    - {name: TOKYO,      lat: 35.7,  lon: 139.7,  type: DC}
+    - {name: SINGAPORE,  lat: 1.35,  lon: 103.8,  type: DC}
+    - {name: LONDON,     lat: 51.5,  lon: -0.1,   type: DC}
+    - {name: SEOUL,      lat: 37.6,  lon: 127.0,  type: EDGE}
+    - {name: NEWDELHI,   lat: 28.6,  lon: 77.2,   type: EDGE}
+    - {name: DUBAI,      lat: 25.3,  lon: 55.3,   type: EDGE}
+    - {name: MOSCOW,     lat: 55.8,  lon: 37.6,   type: EDGE}
+    - {name: PARIS,      lat: 48.9,  lon: 2.4,    type: EDGE}
+    - {name: BERLIN,     lat: 52.5,  lon: 13.4,   type: EDGE}
+    - {name: SAOPAULO,   lat: -23.5, lon: -46.6,  type: EDGE}
+    - {name: MEXICOCITY, lat: 19.4,  lon: -99.1,  type: EDGE}
+    - {name: SYDNEY,     lat: -33.9, lon: 151.2,  type: EDGE}
+    - {name: MUMBAI,     lat: 19.1,  lon: 72.9,   type: ACCESS}
+    - {name: BANGKOK,    lat: 13.7,  lon: 100.5,  type: ACCESS}
+    - {name: JAKARTA,    lat: -6.2,  lon: 106.8,  type: ACCESS}
+    - {name: ISTANBUL,   lat: 41.0,  lon: 28.9,   type: ACCESS}
+    - {name: MADRID,     lat: 40.4,  lon: -3.7,   type: ACCESS}
+    - {name: ROME,       lat: 41.9,  lon: 12.5,   type: ACCESS}
+    - {name: CAIRO,      lat: 30.0,  lon: 31.2,   type: ACCESS}
+    - {name: NAIROBI,    lat: -1.3,  lon: 36.8,   type: ACCESS}
+    - {name: JOBURG,     lat: -26.2, lon: 28.0,   type: ACCESS}
+    - {name: LAGOS,      lat: 6.5,   lon: 3.4,    type: ACCESS}
+    - {name: BUENOSAIRES,lat: -34.6, lon: -58.4,  type: ACCESS}
+
+# ===================== 节点等效AI处理算力(TFLOPS,内部转等效 op/s) =====================
+# 统一按低精度 Tensor 等效吞吐标定，不与 FP32/FP64 峰值混用。
+# LEO≈单个低功耗AI模块；GEO≈多模块；EDGE≈4卡推理服务器；DC≈单台8卡AI服务器。
+# 与下面 η、功率上限联合标定：Pmax = η × Cmax。
+compute_capacity_tflops:
+  LEO:    400       # 用户区间300~500的中值
+  GEO:    1350      # 用户区间1200~1500的中值
+  EDGE:   6000      # 约4×1466 Tensor TFLOPS
+  DC:     32000     # 约1台DGX H100的32 PFLOPS FP8
+  ACCESS: 0
+
+# 每等效操作能耗 η_v (J/op)；由目标功率/等效吞吐反推。
+energy_compute_eta_J_per_cycle:
+  LEO:    3.75e-13                 # 150 W / 400e12 op/s
+  GEO:    3.703703703703704e-13    # 500 W / 1350e12 op/s
+  EDGE:   2.3333333333333334e-13   # 1400 W / 6000e12 op/s
+  DC:     3.1875e-13               # 10.2 kW / 32000e12 op/s
+  ACCESS: 0.0
+
+# 计算功率预算 P_v^max (W)；与容量、η严格对应。
+compute_power_budget_W:
+  LEO:    150
+  GEO:    500
+  EDGE:   1400
+  DC:     10200
+  ACCESS: 0.0
+
+# ===================== 链路每比特能耗 β_e (J/bit) =====================
+energy_link_beta_J_per_bit:
+  TER:          1.5e-10
+  ISL_LEO_LEO:  3.5e-9
+  ISL_LEO_GEO:  4.0e-8
+  SGL_LEO:      5.0e-8
+  SGL_GEO:      1.2e-7
+
+# ===================== 链路参数(标称) =====================
+link_params:
+  isl_leo_leo: {bw_mbps: 10000, loss_rate: 1.0e-6, jitter_ms: 0.1}
+  isl_leo_geo: {bw_mbps: 2000,  loss_rate: 1.0e-5, jitter_ms: 0.5}
+  sgl_leo:     {bw_mbps: 1000,  loss_rate: 1.0e-5, jitter_ms: 1.0, min_elevation_deg: 25}
+  sgl_geo:     {bw_mbps: 1000,  loss_rate: 1.0e-5, jitter_ms: 1.0, min_elevation_deg: 5}
+  ter:         {bw_mbps: 100000,loss_rate: 1.0e-7, jitter_ms: 0.05}
+
+# ===================== 时变信道(C3) =====================
+channel:
+  time_varying: true
+  sgl_rate_floor: 0.4    # 低仰角速率下限系数
+  isl_rate_floor: 0.7    # 远距离 ISL 速率下限系数
+
+# ===================== 业务(A1/A2/A3) =====================
+traffic:
+  truncate_at_simulation_end: true  # 生成时收短尾部会话，arrival+duration不超过simulation.t_end_sec
+  endpoint_mode: satellite      # 所有业务均在卫星产生，源和目的均为当前场景中的卫星
+  endpoint_types_by_biz:        # 场景3中GEO不能作为LL源或目的
+    LL: [LEO]
+    HR: [LEO, GEO]
+    HC: [LEO, GEO]
+    MC: [LEO, GEO]
+  arrival_at_slot_start: true   # 片首统一进入；片内拓扑和路由保持不变
+  arrival_rate_per_slot: {LL: 3, HR: 2, HC: 3, MC: 1}   # LL/HR 多、HC/MC 少
+  peak_profile:          # 高峰包络:片区间 → 到达率倍乘(无昼夜);标定到峰值≈500 并发
+    - {from: 0,   to: 18,   mult: 1.0}
+    - {from: 18,  to: 42,   mult: 2.6}
+    - {from: 42,  to: 1000, mult: 0.6}
+  qos:
+    # 基础计算量 + 多目的附加计算量；固定开销按处理块/帧计。
+    # satellite模式下，dst_knn表示当前快照中按最短传播时延排序的最近N颗可达卫星。
+    LL: {priority: 1, mode: burst,   delay_ms: 20,  loss: 0.01,   rate_mbps: [2, 10],    duration_s: [60, 300],   compression_rho: 0.10, processing_logic: low_latency_filter,              cycles_per_bit_base: 50,   cycles_per_bit_per_dst: 0,  fixed_processing_ms: 0.05, fixed_processing_ms_per_dst: 0,    Lref_bits: 12000,   dst_knn: 5}
+    HR: {priority: 2, mode: burst,   delay_ms: 200, loss: 2.0e-4, rate_kbps: [10, 100],  duration_s: [120, 600],  compression_rho: 0.33, processing_logic: reliable_codec,                 cycles_per_bit_base: 200,  cycles_per_bit_per_dst: 0,  fixed_processing_ms: 0.10, fixed_processing_ms_per_dst: 0,    Lref_bits: 8000,    dst_knn: 10}
+    HC: {priority: 3, mode: persist, delay_ms: 200, loss: 0.01,   rate_mbps: [100, 500], duration_s: [600, 1800], compression_rho: 0.20, processing_logic: heavy_content_codec,            cycles_per_bit_base: 1000, cycles_per_bit_per_dst: 0,  fixed_processing_ms: 1.00, fixed_processing_ms_per_dst: 0,    Lref_bits: 1000000}
+    MC: {priority: 4, mode: persist, delay_ms: 200, loss: 0.01,   rate_kbps: [10, 100],  duration_s: [600, 1800], compression_rho: 0.05, processing_logic: multicast_aggregate_replicate, cycles_per_bit_base: 40,   cycles_per_bit_per_dst: 15, fixed_processing_ms: 0.10, fixed_processing_ms_per_dst: 0.02, Lref_bits: 12000,   k_dst: 3}
+
+# ===================== 算法参数 =====================
+algorithm:
+  load_balance_k: 4              # 旧接口参数；S1的balance现采用分配后平方利用率增量
+  reroute_all_each_slot: true     # 新快照中对所有尚未结束任务重新计算放置与路径
+  enable_preemption: true
+  preempt_lower_bound_ratio: 0.5
+  enforce_energy_budget: true    # D4 能量硬约束
+  top_m_candidates: 10           # S2/S3/S4 只精修前 M 个候选(按快速代价)
+  refine_cap: 3                  # S2/S3 直连全失败时,最多对前几个候选做 KSP/LARAC 精修(限worst-case)
+  ksp_K: 3                       # S2 Yen 的 K
+  larac_max_iter: 20             # S3 迭代上限
+  aco: {ants: 8, iters: 8, alpha: 1.0, beta: 2.0, evap: 0.3, q: 1.0}
+  milp: {max_nodes: 80, max_tasks_per_slot: 15}   # S5 仅小规模
+
+# ===================== 规模缩放(联调用) =====================
+scale:
+  enabled: true
+  plane_cap: 6         # 缩比:每壳层最多 6 个平面(保持每面 20 颗→ISL 可见);--no-scale 时忽略

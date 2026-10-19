@@ -1,0 +1,152 @@
+# 算力路由仿真配置（v3）
+# 默认是"小规模快速跑通"配置；批量实验改 scale 字段即可。
+
+simulation:
+  scenario: A           # A: LEO+地面站  B: LEO+GEO
+  t_start_sec: 0
+  t_end_sec: 1800       # 30 min
+  slot_sec: 30          # 时间片
+  random_seed: 42
+  log_level: INFO
+
+# ===================== 拓扑 =====================
+constellation:
+  # Walker Star  T:P:F = total:planes:phase
+  leo:
+    total: 1200
+    planes: 30
+    phase: 1
+    inclination_deg: 86.4
+    altitude_km: 600
+  geo:
+    count: 3
+    longitudes_deg: [0, 120, -120]   # 三星等间隔
+
+ground:
+  # 简化的代表性城市集（lat, lon, type）
+  # type: DC | EDGE | ACCESS
+  stations:
+    - {name: BJ-DC, lat: 39.9, lon: 116.4, type: DC}
+    - {name: SH-DC, lat: 31.2, lon: 121.5, type: DC}
+    - {name: GZ-DC, lat: 23.1, lon: 113.3, type: DC}
+    - {name: CD-DC, lat: 30.6, lon: 104.1, type: DC}
+    - {name: WH-DC, lat: 30.6, lon: 114.3, type: DC}
+    # EDGE
+    - {name: NJ-EDGE, lat: 32.0, lon: 118.8, type: EDGE}
+    - {name: HZ-EDGE, lat: 30.3, lon: 120.2, type: EDGE}
+    - {name: TJ-EDGE, lat: 39.1, lon: 117.2, type: EDGE}
+    - {name: XA-EDGE, lat: 34.3, lon: 108.9, type: EDGE}
+    - {name: CQ-EDGE, lat: 29.6, lon: 106.5, type: EDGE}
+    - {name: SY-EDGE, lat: 41.8, lon: 123.4, type: EDGE}
+    - {name: KM-EDGE, lat: 25.0, lon: 102.7, type: EDGE}
+    - {name: HRB-EDGE, lat: 45.8, lon: 126.5, type: EDGE}
+    - {name: LS-EDGE, lat: 29.7, lon: 91.1, type: EDGE}
+    - {name: UR-EDGE, lat: 43.8, lon: 87.6, type: EDGE}
+    # ACCESS（30 个，主要城市作接入用户）
+    - {name: AC-01, lat: 22.5, lon: 114.1, type: ACCESS}     # 深圳
+    - {name: AC-02, lat: 36.7, lon: 117.0, type: ACCESS}     # 济南
+    - {name: AC-03, lat: 28.2, lon: 112.9, type: ACCESS}     # 长沙
+    - {name: AC-04, lat: 26.6, lon: 106.7, type: ACCESS}     # 贵阳
+    - {name: AC-05, lat: 38.9, lon: 121.6, type: ACCESS}     # 大连
+    - {name: AC-06, lat: 24.9, lon: 102.8, type: ACCESS}     # 玉溪
+    - {name: AC-07, lat: 36.1, lon: 103.7, type: ACCESS}     # 兰州
+    - {name: AC-08, lat: 47.9, lon: 106.9, type: ACCESS}     # UB（蒙）
+    - {name: AC-09, lat: 1.35, lon: 103.8, type: ACCESS}     # 新加坡
+    - {name: AC-10, lat: 13.7, lon: 100.5, type: ACCESS}     # 曼谷
+    - {name: AC-11, lat: -6.2, lon: 106.8, type: ACCESS}     # 雅加达
+    - {name: AC-12, lat: 35.7, lon: 139.7, type: ACCESS}     # 东京
+    - {name: AC-13, lat: 37.6, lon: 127.0, type: ACCESS}     # 首尔
+    - {name: AC-14, lat: 19.1, lon: 72.9, type: ACCESS}      # 孟买
+    - {name: AC-15, lat: 28.6, lon: 77.2, type: ACCESS}      # 新德里
+    - {name: AC-16, lat: 25.3, lon: 55.3, type: ACCESS}      # 迪拜
+    - {name: AC-17, lat: 30.0, lon: 31.2, type: ACCESS}      # 开罗
+    - {name: AC-18, lat: 51.5, lon: -0.1, type: ACCESS}      # 伦敦
+    - {name: AC-19, lat: 48.9, lon: 2.4, type: ACCESS}       # 巴黎
+    - {name: AC-20, lat: 40.4, lon: -3.7, type: ACCESS}      # 马德里
+    - {name: AC-21, lat: 55.8, lon: 37.6, type: ACCESS}      # 莫斯科
+    - {name: AC-22, lat: 41.0, lon: 28.9, type: ACCESS}      # 伊斯坦布尔
+    - {name: AC-23, lat: 40.7, lon: -74.0, type: ACCESS}     # 纽约
+    - {name: AC-24, lat: 34.0, lon: -118.2, type: ACCESS}    # 洛杉矶
+    - {name: AC-25, lat: 25.8, lon: -80.2, type: ACCESS}     # 迈阿密
+    - {name: AC-26, lat: -23.5, lon: -46.6, type: ACCESS}    # 圣保罗
+    - {name: AC-27, lat: -33.9, lon: 151.2, type: ACCESS}    # 悉尼
+    - {name: AC-28, lat: -36.8, lon: 174.7, type: ACCESS}    # 奥克兰
+    - {name: AC-29, lat: 5.6, lon: -0.2, type: ACCESS}       # 阿克拉
+    - {name: AC-30, lat: -1.3, lon: 36.8, type: ACCESS}      # 内罗毕
+
+# ===================== 节点算力（应用层） =====================
+compute_capacity_tflops:
+  LEO:    372
+  GEO:    1500
+  EDGE:   30
+  DC:     10000000     # 10^7
+  ACCESS: 0
+
+# ===================== 能耗模型 (§4) =====================
+# 单节点每周期能耗 η_v = κ_v · f_v² (J/cycle)
+energy_compute_eta_J_per_cycle:
+  LEO:    1.0e-9
+  GEO:    2.25e-9
+  EDGE:   2.0e-9
+  DC:     0.9e-9
+  ACCESS: 0.0          # 占位
+
+# 单链路每比特能耗 β_e = (P_tx + P_circ) / R (J/bit)
+energy_link_beta_J_per_bit:
+  TER:          1.5e-10
+  ISL_LEO_LEO:  3.5e-9
+  ISL_LEO_GEO:  4.0e-8
+  SGL_LEO:      5.0e-8
+  SGL_GEO:      1.2e-7
+
+# ===================== 链路参数 =====================
+link_params:
+  isl_leo_leo:
+    bw_mbps: 10000           # 10 Gbps
+    loss_rate: 1.0e-6
+    jitter_ms: 0.1
+  isl_leo_geo:
+    bw_mbps: 2000            # 2 Gbps
+    loss_rate: 1.0e-5
+    jitter_ms: 0.5
+  sgl_leo:
+    bw_mbps: 1000            # 1 Gbps
+    loss_rate: 1.0e-4
+    jitter_ms: 1.0
+    min_elevation_deg: 25
+  sgl_geo:
+    bw_mbps: 1000
+    loss_rate: 1.0e-4
+    jitter_ms: 1.0
+    min_elevation_deg: 5     # GEO 几乎在赤道上方，仰角阈低
+  ter:
+    bw_mbps: 100000          # 100 Gbps
+    loss_rate: 1.0e-7
+    jitter_ms: 0.05
+
+# ===================== 业务参数 =====================
+traffic:
+  arrival_rate_per_slot:     # 每时间片新到达任务数（泊松）
+    LL: 8                    # 低时延 突发
+    HR: 5                    # 高可靠 突发
+    HC: 3                    # 大容量 常驻
+    MC: 2                    # 多连接 常驻
+  qos:
+    LL: {priority: 1, mode: burst,    delay_ms: 20,  loss: 0.01,    rate_mbps: [2, 10],   duration_s: [60, 300],   strategy: latency, cycles_per_bit: 300,  compression_rho: 0.20}
+    HR: {priority: 2, mode: burst,    delay_ms: 200, loss: 2.0e-4,  rate_kbps: [10, 100], duration_s: [120, 600],  strategy: latency, cycles_per_bit: 500,  compression_rho: 1.00}
+    HC: {priority: 3, mode: persist,  delay_ms: 200, loss: 0.01,    rate_mbps: [100, 500],duration_s: [600, 1800], strategy: balance, cycles_per_bit: 1000, compression_rho: 0.10}
+    MC: {priority: 4, mode: persist,  delay_ms: 200, loss: 0.01,    rate_kbps: [10, 100], duration_s: [600, 1800], strategy: balance, cycles_per_bit: 500,  compression_rho: 0.15, k_dst: 3}
+
+# ===================== 算法参数 =====================
+algorithm:
+  load_balance_k: 4
+  preempt_lower_bound_ratio: 0.5     # 抢占时常驻任务最低保留比例
+  enable_preemption: true
+  compute_stages: 4                  # K：任务总 cycles 拆成 K 等份做在网计算 (§4.3)
+  hr_skip_layered: true              # HR 业务 ρ=1 时短路到 flat Dijkstra,跳过分层图
+
+# ===================== 规模缩放（联调用） =====================
+# 把 leo.total 和 leo.planes 等比缩小可大幅加速；正式跑改回 1200/30
+scale:
+  leo_total_override: 240    # 6 平面 × 40 颗，开发时用
+  leo_planes_override: 6
