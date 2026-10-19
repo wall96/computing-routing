@@ -88,7 +88,6 @@ def experiment_config(base,scenario,variant,out,slots=120,arrival_profile='legac
     cfg['simulation'].update(scenario=scenario,strategy='latency',solver='S1',
         t_start_sec=0,t_end_sec=slots*30,slot_sec=30,random_seed=42,
         event_driven_within_slot=True,event_output_dir=str(Path(out).resolve()))
-    cfg['scale']['enabled']=False
     cfg['algorithm'].update(latency_lazy_candidates=True,enable_preemption=False)
     cap=cfg['constellation']['scenario_max_concurrency'][scenario]
     steady_units=max(1,round(cap*.6/9))
@@ -206,7 +205,7 @@ def main():
                  **{f'background_{b}':profile['background_counts_by_slot'][i][b] for b in WEIGHTS},
                  **{f'arrivals_{b}':cfg['traffic']['fixed_arrival_overrides'][i][b] for b in WEIGHTS})
             for i in range(args.slots)])
-    sim=Simulator(cfg,scenario=args.scenario,strategy='latency',solver='S1',no_scale=True)
+    sim=Simulator(cfg,scenario=args.scenario,strategy='latency',solver='S1')
     sim.metrics.meta.update(mixed_variant=args.variant,mixed_ratio=WEIGHTS)
     metrics=sim.run()
     metrics.export(str(out))

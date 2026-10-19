@@ -33,10 +33,10 @@ pip install -r requirements.txt      # numpy, PyYAML, pulp(仅 S5 需要)
 
 ## 运行
 ```bash
-# 单次:场景3 + 能耗策略 + LARAC,全规模 1000 星
-python main.py --scenario 3 --strategy energy --solver S3 --no-scale --out results/run1
+# 单次:场景3 + 能耗策略 + LARAC(星座始终全量,场景3为 1000 LEO + 6 GEO)
+python main.py --scenario 3 --strategy energy --solver S3 --out results/run1
 
-# 缩比快速联调(默认 scale.enabled=true,每壳层 6 平面)
+# 短时联调:缩短仿真时长即可
 python main.py --scenario 1 --strategy latency --solver S1 --t-end 300
 
 # 横向对比矩阵(场景×策略×算法 + 消融),全规模
@@ -47,13 +47,13 @@ python experiments/run_matrix.py --quick               # 短时冒烟
 python experiments/run_single_biz.py --out results/single_biz
 
 # 推荐高成功率配置：场景3完整星座，LL只投递到最近站点
-python experiments/run_single_biz.py --scenario 3 --no-scale --ll-dst-knn 1 --out results/single_biz_recommended
+python experiments/run_single_biz.py --scenario 3 --ll-dst-knn 1 --out results/single_biz_recommended
 
 # 对结果中的拒绝任务做满资源反事实诊断
-python experiments/analyze_rejections.py results/run1 --biz LL --scenario 1 --no-scale
+python experiments/analyze_rejections.py results/run1 --biz LL --scenario 1
 ```
 
-`--no-scale` 用完整 1000 颗星座(推荐正式实验;缩比只为联调提速)。
+星座按 config.yaml 全量构建(L1/L2 各 20×25 Walker),已取消缩比。
 
 ## 输出(`results/<out>/`)
 - `kpi.json` —— 全部 KPI(主:`qos_rate_overall` / `qos_rate_by_biz`)
@@ -75,7 +75,7 @@ python experiments/analyze_rejections.py results/run1 --biz LL --scenario 1 --no
 
 ```powershell
 # 分别将strategy设为latency/balance/energy，scenario设为1/2/3。
-python experiments/run_single_biz.py --scenario 2 --strategy balance --no-scale --stress-concurrency --stress-slots 10 --steady-ratio 0.60 --out results/all_strategy_single_biz_20261016/balance/sc2
+python experiments/run_single_biz.py --scenario 2 --strategy balance --stress-concurrency --stress-slots 10 --steady-ratio 0.60 --out results/all_strategy_single_biz_20261016/balance/sc2
 # 场景3增加 --peak-offered-ratio 1.05。
 python -m pip install -r requirements-report.txt
 python experiments/build_all_strategy_report.py

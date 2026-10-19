@@ -70,13 +70,12 @@ def main():
     ap.add_argument("--scenario", type=int, default=1)
     ap.add_argument("--strategy", default="latency")
     ap.add_argument("--solver", default="S1")
-    ap.add_argument("--no-scale", action="store_true")
     args = ap.parse_args()
 
     with open(args.config, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     sim = Simulator(cfg, scenario=args.scenario, strategy=args.strategy,
-                    solver=args.solver, no_scale=args.no_scale)
+                    solver=args.solver)
     result_dir = Path(args.result_dir)
     with open(result_dir / "generated_tasks.csv", encoding="utf-8-sig", newline="") as f:
         rows = [r for r in csv.DictReader(f)

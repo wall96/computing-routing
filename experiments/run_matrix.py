@@ -21,12 +21,11 @@ def load_cfg(path):
         return yaml.safe_load(f)
 
 
-def run_one(cfg, scenario, strategy, solver, t_end, tag="", no_scale=True,
-            detail_out=None):
+def run_one(cfg, scenario, strategy, solver, t_end, tag="", detail_out=None):
     cfg = copy.deepcopy(cfg)
     cfg["simulation"]["t_end_sec"] = t_end
     cfg["simulation"]["log_level"] = "WARNING"
-    sim = Simulator(cfg, scenario=scenario, strategy=strategy, solver=solver, no_scale=no_scale)
+    sim = Simulator(cfg, scenario=scenario, strategy=strategy, solver=solver)
     # 静默逐片打印
     import builtins
     orig = builtins.print
@@ -64,13 +63,11 @@ def main():
     ap.add_argument("--quick", action="store_true")
     ap.add_argument("--t-end", type=float, default=None)
     ap.add_argument("--solvers", default="S0,S1,S2,S3")
-    ap.add_argument("--scale", action="store_true", help="用缩比星座(默认全规模)")
     ap.add_argument("--out", default=str(Path(__file__).resolve().parent.parent / "results"))
     args = ap.parse_args()
 
     base_cfg = load_cfg(args.config)
     t_end = args.t_end if args.t_end else (300 if args.quick else 600)
-    no_scale = not args.scale
     solvers = args.solvers.split(",")
     rows = []
     out = Path(args.out)
@@ -84,7 +81,7 @@ def main():
                 print(f"运行 scenario={scenario} strategy={strategy} solver={solver} ...",
                       flush=True)
                 rows.append(run_one(base_cfg, scenario, strategy, solver, t_end,
-                                    tag="main", no_scale=no_scale,
+                                    tag="main",
                                     detail_out=runs_out / f"main_sc{scenario}_{strategy}_{solver}"))
 
     # 2) 消融(场景3, latency, S1):压缩关 / 能量约束关 / 抢占关
@@ -93,7 +90,6 @@ def main():
         mutate(cfg)
         print(f"消融 {name} ...", flush=True)
         rows.append(run_one(cfg, 3, "latency", "S1", t_end, tag=f"ablation:{name}",
-                            no_scale=no_scale,
                             detail_out=runs_out / f"ablation_{name}"))
 
     def no_compress(cfg):

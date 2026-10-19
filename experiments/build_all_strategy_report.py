@@ -67,7 +67,7 @@ def collect():
     cfg = yaml.safe_load((ROOT / 'config.yaml').read_text(encoding='utf-8'))
     snapshots = {}
     for sc in (1, 2, 3):
-        sim = Simulator(cfg, scenario=sc, no_scale=True)
+        sim = Simulator(cfg, scenario=sc)
         for i in range(10):
             snapshots[sc, i] = build_snapshot(i*30, sim.all_nodes, cfg, sc)
     summary, timeseries, rejection_rows, runs = [], [], [], {}
@@ -555,7 +555,7 @@ def make_document(cfg,summary,timeseries,rejections,runs):
               'kpi.json和effective_config.json。统一指标为all_metrics.csv；时序为all_slot_metrics.csv；'
               '拒绝审计为rejection_audit.csv；配对输入与源码校验为audit_manifest.json。')
     paragraph(document,'运行示例（分别替换策略和场景）：')
-    paragraph(document,'python experiments/run_single_biz.py --scenario 2 --strategy energy --no-scale '
+    paragraph(document,'python experiments/run_single_biz.py --scenario 2 --strategy energy '
               '--stress-concurrency --stress-slots 10 --steady-ratio 0.60 '
               '--out results/all_strategy_single_biz_20261016/energy/sc2')
     paragraph(document,'场景3额外使用 --peak-offered-ratio 1.05。报告生成：'

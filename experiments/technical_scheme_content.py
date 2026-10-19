@@ -28,7 +28,7 @@ def build_technology(r,cfg,network_counts):
         ['L2','20面×25颗＝500',1100,'87°','phase=1；仅场景3启用',f'{2*math.pi*math.sqrt((radius+1100e3)**3/mu):.2f}'],
         ['GEO','6颗',35786,'0°','经度0、60、120、180、−120、−60°',f'{2*math.pi*math.sqrt((radius+35786e3)**3/mu):.2f}']])
     r.eq('圆轨道与相位', 'a=R_E+h；n=√(μ/a³)；T_orbit=2π/n；M(t)=M₀+nt', 'topology.py:build_shell, propagate_satellite')
-    r.eq('Walker-Star初始位置', 'Ω_p=πp/P；M₀(p,s)=2πs/S+2πFp/(PS)；p=0…P−1，s=0…S−1', 'topology.py:build_shell')
+    r.eq('Walker初始位置', 'Delta:Ω_p=2πp/P；Star:Ω_p=πp/P；M₀(p,s)=2πs/S+2πFp/(PS)；p=0…P−1，s=0…S−1', 'topology.py:build_shell')
     r.eq('旋转到地固坐标', 'x_ECEF=R_z(−ω_Et)R_z(Ω_p)R_x(i)[a cos M，a sin M，0]ᵀ', 'topology.py:propagate_satellite, eci_to_ecef')
     r.p('常数为R_E＝6378.137 km、μ＝3.986004418×10¹⁴ m³/s²、地球角速度7.2921159×10⁻⁵ rad/s、光速299792458 m/s。轨道是简化圆轨道模型，不包含J2摄动、姿态、太阳遮挡或真实星历；GEO按同一圆轨道传播公式构造。RAAN使用πp/P，不应改写成与当前代码不同的2πp/P。')
     r.p('同面卫星按环形连接；同壳层邻面按近距离候选连接；允许跨壳层近邻连接；每个可见LEO–GEO对可建链。近邻连接代码对有限候选尝试，并非遍历所有可见卫星形成全连接图；没有GEO–GEO直连构造。星地链路检查最低仰角；DC间互连、EDGE连接最近两个DC及最近EDGE。')
@@ -172,7 +172,7 @@ def build_technology(r,cfg,network_counts):
     r.fig(r.timeline,'动态拓扑时间片中的业务事件与重算','框架',[
         '拓扑在片首更新，先重算已存在的存续任务，再处理片内按时序到达的新任务，任务完成即释放。新到达不追溯改变过去服务，下一片再对存续业务重算。',
         '片内几何静止不等于资源静止：到达与结束改变占用，从而影响后来任务的可用资源和处理负载项；已经建立的路由在片内不主动重优化。'])
-    r.p('传统片驱动默认仅片边界记账，适合任务片首到达且恰好持续30 s的单业务压力实验。原时长混合实验开启event_driven_within_slot，才能处理真正随机到达/结束并正确计能量。主config.yaml默认scale.enabled=true、arrival_at_slot_start=true，不能只运行主入口就认为复现了全规模事件实验；正式批量入口使用冻结覆盖配置且关闭缩放。')
+    r.p('传统片驱动默认仅片边界记账，适合任务片首到达且恰好持续30 s的单业务压力实验。原时长混合实验开启event_driven_within_slot，才能处理真正随机到达/结束并正确计能量。主config.yaml默认arrival_at_slot_start=true，不能只运行主入口就认为复现了全规模事件实验；正式批量入口使用冻结覆盖配置。')
     r.p('事件引擎不抢占：即使主config.yaml enable_preemption=true，也不会启用资源抢占；单业务片首统一重算分支同样不走旧_schedule_task的抢占回路。旧抢占实现只缩减HC/MC带宽而未同步改业务速率/计算需求，不能在本报告当成已验证的端到端降级机制。')
     r.h2('7.2 输出CSV、主键与接口约定')
     r.t(['文件','粒度/主键','关键字段与注意事项'],[
@@ -188,5 +188,5 @@ def build_technology(r,cfg,network_counts):
         ['mixed_metrics / all_metrics等','总体＋分业务/策略汇总','统计定义依阶段；全网资源指标不能无依据分摊给某一业务']])
     r.p('独立业务实验对接联合键为(batch_id,scenario,strategy,task_id)，因为不同策略也重新抽业务，同名task_id不表示同一个任务。allocation_id同样只在单次运行内唯一。JSON字段应由JSON解析器读取而非按逗号切割；CSV采用UTF-8 BOM。资源单位Mbps、op/s、W；部分旧列名仍写cycle/s，接口需按语义转换而不是再乘CPU频率。批内配对实验只有确认输入哈希一致后才可按task_id求交集。')
     r.h2('7.3 最小运行与复现实验入口')
-    r.code('python main.py --scenario 1 --strategy latency --solver S1 --no-scale --out results/manual_check\npython experiments/run_single_biz.py --scenario 1 --no-scale --stress-concurrency --out results/new_single\npython experiments/run_randomized_batch.py --prepare\n# 对打印的新批次目录分别执行九组--scenario/--strategy，再--summarize\npython experiments/build_technical_scheme_report.py')
+    r.code('python main.py --scenario 1 --strategy latency --solver S1 --out results/manual_check\npython experiments/run_single_biz.py --scenario 1 --stress-concurrency --out results/new_single\npython experiments/run_randomized_batch.py --prepare\n# 对打印的新批次目录分别执行九组--scenario/--strategy，再--summarize\npython experiments/build_technical_scheme_report.py')
     r.p('numpy与PyYAML为核心依赖；PuLP仅S5需要；绘图和Word构建依赖matplotlib、python-docx。Windows Word/PyMuPDF用于本报告PDF渲染验收，不属于仿真运行依赖。不要直接运行旧报告生成器覆盖本次新技术方案；本报告独立命名，所有旧Word与原始实验结果保持不变。')
