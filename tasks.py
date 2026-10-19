@@ -1,7 +1,10 @@
-"""M3 任务生成器:4类业务到达、高峰包络和星上/地面端点模式。
+"""M3 任务生成器:4类业务到达、高峰包络和端点模式。
 
-默认 satellite 模式下，所有业务都由卫星产生并投递到其他卫星；LL/HR从
-当前时间片拓扑中选择较近的卫星，HC/MC可选择全局卫星。地面站仅作为算力节点。
+endpoint_mode:
+  terminal  源/目的均为地面随机终端坐标;每片按卫星覆盖接入(上星计算后下行到目的终端)。
+            目的在源周围 dst_max_km[biz] 大圆距离内均匀抽取(未配置则全球均匀)。
+  satellite 源和目的均为卫星;LL/HR取当前快照较近卫星,HC/MC可取全局卫星。
+  ground    源和目的为固定 ACCESS 地面站(旧模式)。
 """
 from __future__ import annotations
 from heapq import heappop, heappush
@@ -35,6 +38,17 @@ def _haversine_km(a, b) -> float:
     return 2 * r * math.asin(min(1.0, math.sqrt(h)))
 
 
+def _offset_point(lat, lon, dist_km, bearing_rad) -> Tuple[float, float]:
+    """从 (lat, lon) 沿 bearing 走大圆距离 dist_km 后的坐标。"""
+    d = dist_km / 6371.0
+    p1, l1 = math.radians(lat), math.radians(lon)
+    p2 = math.asin(math.sin(p1) * math.cos(d) + math.cos(p1) * math.sin(d) * math.cos(bearing_rad))
+    l2 = l1 + math.atan2(math.sin(bearing_rad) * math.sin(d) * math.cos(p1),
+                         math.cos(d) - math.sin(p1) * math.sin(p2))
+    lon2 = (math.degrees(l2) + 180.0) % 360.0 - 180.0
+    return math.degrees(p2), lon2
+
+
 class TaskGenerator:
     def __init__(self, traffic_cfg: dict, access_nodes, slot_sec: float, seed: int = 42,
                  end_time_sec: float = None):
@@ -59,6 +73,8 @@ class TaskGenerator:
         self._sat_nearest_cache: Dict[str, List[str]] = {}
 
     def _endpoint_pool(self, snapshot: Snapshot = None, biz: str = None) -> List[str]:
+        if self.endpoint_mode not in ("satellite", "ground", "terminal"):
+            raise ValueError(f"未知 endpoint_mode: {self.endpoint_mode}")
         if self.endpoint_mode == "satellite":
             if snapshot is None:
                 return []
@@ -96,6 +112,39 @@ class TaskGenerator:
         self._sat_nearest_cache[src] = ordered
         return ordered
 
+    # ---------- terminal 模式:地面随机终端 ----------
+    def _lat_band(self):
+        tcfg = self.cfg.get("terminal", {})
+        lo, hi = tcfg.get("lat_range_deg", [-60.0, 60.0])
+        return float(lo), float(hi)
+
+    def _random_ground_point(self) -> Tuple[float, float]:
+        """经纬度框内按球面面积均匀取点。"""
+        tcfg = self.cfg.get("terminal", {})
+        lat_lo, lat_hi = self._lat_band()
+        lon_lo, lon_hi = tcfg.get("lon_range_deg", [-180.0, 180.0])
+        s = self.rng.uniform(math.sin(math.radians(lat_lo)), math.sin(math.radians(lat_hi)))
+        return math.degrees(math.asin(s)), self.rng.uniform(float(lon_lo), float(lon_hi))
+
+    def _random_point_near(self, src: Tuple[float, float], max_km: float) -> Tuple[float, float]:
+        """以 src 为中心、半径 max_km 的球冠内按面积均匀取点,并落在纬度带内。"""
+        lat_lo, lat_hi = self._lat_band()
+        cos_max = math.cos(min(math.pi, max_km / 6371.0))
+        for _ in range(50):
+            ang = math.acos(self.rng.uniform(cos_max, 1.0))
+            p = _offset_point(src[0], src[1], ang * 6371.0, self.rng.uniform(0, 2 * math.pi))
+            if lat_lo <= p[0] <= lat_hi:
+                return p
+        return src   # 极端情况(源贴着纬度带边界):退化为与源同址
+
+    def _terminal_endpoints(self, biz: str, bc: dict):
+        src = self._random_ground_point()
+        k = int(bc.get("k_dst", 3)) if biz == "MC" else 1
+        max_km = self.cfg.get("terminal", {}).get("dst_max_km", {}).get(biz)
+        dsts = [self._random_point_near(src, float(max_km)) if max_km
+                else self._random_ground_point() for _ in range(k)]
+        return src, dsts
+
     def _new_id(self, biz):
         self._counter += 1
         return f"T-{biz}-{self._counter:06d}"
@@ -129,26 +178,32 @@ class TaskGenerator:
             else:
                 n = self._poisson(lam * mult)
             bc = qos[biz_str]
-            endpoints = self._endpoint_pool(snapshot, biz_str)
+            terminal = self.endpoint_mode == "terminal"
+            endpoints = [] if terminal else self._endpoint_pool(snapshot, biz_str)
             for _ in range(n):
-                if len(endpoints) < 2:
-                    continue
-                src = self.rng.choice(endpoints)
-                dst_knn = bc.get("dst_knn")
-                if self.endpoint_mode == "satellite" and dst_knn:
-                    pool = self._nearest_satellites(snapshot, src, endpoints)[:int(dst_knn)]
-                elif self.endpoint_mode == "ground" and dst_knn:
-                    pool = self.nearest[src][:int(dst_knn)]
+                src_coord = dst_coords = None
+                if terminal:
+                    # 先抽坐标;终端 ID 依赖 task_id,在下方生成
+                    src_coord, dst_coords = self._terminal_endpoints(biz_str, bc)
                 else:
-                    pool = [x for x in endpoints if x != src]
-                if biz_str == "MC":
-                    dst_set = _pick_distinct(self.rng, pool, bc.get("k_dst", 3), [])
-                    if not dst_set:
+                    if len(endpoints) < 2:
                         continue
-                else:
-                    if not pool:
-                        continue
-                    dst_set = [self.rng.choice(pool)]
+                    src = self.rng.choice(endpoints)
+                    dst_knn = bc.get("dst_knn")
+                    if self.endpoint_mode == "satellite" and dst_knn:
+                        pool = self._nearest_satellites(snapshot, src, endpoints)[:int(dst_knn)]
+                    elif self.endpoint_mode == "ground" and dst_knn:
+                        pool = self.nearest[src][:int(dst_knn)]
+                    else:
+                        pool = [x for x in endpoints if x != src]
+                    if biz_str == "MC":
+                        dst_set = _pick_distinct(self.rng, pool, bc.get("k_dst", 3), [])
+                        if not dst_set:
+                            continue
+                    else:
+                        if not pool:
+                            continue
+                        dst_set = [self.rng.choice(pool)]
                 rate = _rate_mbps(self.rng, bc)
                 dur = self.rng.uniform(*bc["duration_s"])
                 # 时间片模型只在边界做一次联合路由。任务统一在片首进入，避免
@@ -173,6 +228,9 @@ class TaskGenerator:
                     if dur <= 0:
                         continue
                 task_id = self._new_id(biz_str)
+                if terminal:
+                    src = f"UT-{task_id}-S"
+                    dst_set = [f"UT-{task_id}-D{i}" for i in range(len(dst_coords))]
                 omega_base = float(bc.get("cycles_per_bit_base", bc.get("cycles_per_bit", 0.0)))
                 omega_per_dst = float(bc.get("cycles_per_bit_per_dst", 0.0))
                 omega_eff = omega_base + len(dst_set) * omega_per_dst
@@ -191,6 +249,7 @@ class TaskGenerator:
                     fixed_processing_ms_per_dst=float(bc.get("fixed_processing_ms_per_dst", 0.0)),
                     cycles_total=data_bits * omega_eff, data_volume_bits=data_bits,
                     compute_rate=rate * 1e6 * omega_eff,   # equivalent op/s
+                    src_coord=src_coord, dst_coords=dst_coords,
                 ))
                 self.duration_adjustments.append(dict(task_id=task_id,biz=biz_str,
                     arrival_t=arrival,sampled_duration_s=sampled_duration,

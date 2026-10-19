@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from models import Node, Snapshot, Task, BizType, NodeType
 from topology import build_shell, build_geo, build_ground
-from network import build_snapshot
+from network import build_snapshot, attach_terminals, terminals_of
 from tasks import TaskGenerator
 from resources import ResourceLedger
 from metrics import Metrics
@@ -55,6 +55,19 @@ class Simulator:
         nodes += build_ground(self.cfg["ground"]["stations"], cap, eta, pw)
         return nodes
 
+    @staticmethod
+    def reject_reason(snapshot, task) -> str:
+        """无可行解时细分原因:终端不在任何卫星覆盖内 / 其它约束不可行。"""
+        if task.src in snapshot.coverage and not snapshot.coverage[task.src]:
+            return "src_no_coverage"
+        if any(d in snapshot.coverage and not snapshot.coverage[d] for d in task.dst_set):
+            return "dst_no_coverage"
+        return "no_feasible"
+
+    def attach_terminals(self, snapshot, tasks):
+        if self.cfg["traffic"].get("endpoint_mode") == "terminal":
+            attach_terminals(snapshot, terminals_of(tasks), self.cfg)
+
     def _solve(self, snapshot, task) -> Optional[object]:
         t0 = time.perf_counter()
         alloc = self.solver.solve(snapshot, task, self.strategy)
@@ -97,6 +110,8 @@ class Simulator:
             new_tasks = self.gen.gen_for_slot(t, slot_idx, snapshot=snapshot)
             for tk in new_tasks:
                 self.metrics.record_attempt(tk, generated_slot=slot_idx, scheduled_t=t)
+            # 地面终端:按本片卫星位置重算覆盖并接入(存续任务也要重新接入)
+            self.attach_terminals(snapshot, [a.task for a in self.ledger.active] + new_tasks)
 
             rerouted = reroute_failed = 0
             acc = rej = 0
@@ -125,7 +140,7 @@ class Simulator:
                     new = self._solve(snapshot, task)
                     if new is None:
                         if old is None:
-                            self.metrics.record_reject(task, "no_feasible")
+                            self.metrics.record_reject(task, self.reject_reason(snapshot, task))
                             rej += 1
                         else:
                             self.metrics.record_drop(old)
@@ -167,7 +182,7 @@ class Simulator:
                     if self._schedule_task(snapshot, tk, t):
                         acc += 1
                     else:
-                        self.metrics.record_reject(tk, "no_feasible")
+                        self.metrics.record_reject(tk, self.reject_reason(snapshot, tk))
                         rej += 1
 
             self.metrics.record_slot(t, snapshot, acc, rej, len(self.ledger.active),

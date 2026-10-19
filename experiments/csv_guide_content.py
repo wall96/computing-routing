@@ -9,8 +9,10 @@ strategy|文本|优化目标：latency最小时延、balance负载均衡、energ
 solver|文本|求解器S0～S5。正式三策略对照主要使用S1；目标策略与求解器应分别筛选。
 biz,biz_only|文本|业务LL/HR/HC/MC；汇总中的ALL表示四类总体，不是第五类业务。
 task_id|文本|一次运行内的任务唯一编号，例如T-LL-000001。不同运行会重用编号，跨目录连接必须加run_id。
-src|文本|业务源节点ID；当前正式配置为卫星，地面站不是业务源。
+src|文本|业务源节点ID；terminal模式为地面随机终端UT-<task_id>-S，satellite模式为卫星。历史目录多为卫星源。
 dst_json|JSON数组|目的节点ID列表；MC可有多个目的。用json.loads解析，不能按逗号手工拆分。
+src_coord_json|JSON数组/空|terminal模式下源终端[纬度,经度]（度）；其它模式为空。
+dst_coords_json|JSON嵌套数组/空|terminal模式下各目的终端[纬度,经度]，顺序与dst_json一致；其它模式为空。
 dst|分号文本|目的节点列表用分号连接的显示形式，见tasks.csv；与dst_json的JSON编码不同。
 priority|整数|业务优先级，数字越小越优先；现行LL/HR/HC/MC依次为1/2/3/4。
 mode|文本|任务生成模式burst或persist等标签；不能单凭该字段判断仿真是否启用片内精确事件引擎。

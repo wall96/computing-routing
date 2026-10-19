@@ -38,6 +38,10 @@ class S5Milp(Solver):
             if not lk.alive:
                 continue
             arcs.append((a, b)); arcs.append((b, a))
+        # 终端不能中转:非本任务端点的终端弧直接删除
+        own = {task.src, *task.dst_set}
+        arcs = [(a, b) for (a, b) in arcs
+                if not ({a, b} & snapshot.endpoint_only) or {a, b} & snapshot.endpoint_only <= own]
         r0, rho, D0 = task.rate_mbps, task.compression_rho, task.data_volume_bits
         dsts = task.dst_set
 
@@ -72,6 +76,12 @@ class S5Milp(Solver):
                     prob += (o - i == src_amt)
                 else:
                     prob += (o - i == 0)
+
+        # 本任务自己的终端也只能作本段首/尾:其它终端在本段内不得有流量
+        for seg_vars, ends in [(fpre, {task.src})] + [
+                (fpost[j], {dst}) for j, dst in enumerate(dsts)]:
+            for n in own & snapshot.endpoint_only - ends:
+                prob += pulp.lpSum(seg_vars[(a, b)] for (a, b) in arcs if n in (a, b)) == 0
 
         # 带宽(无向物理链路)
         for (a, b), lk in snapshot.links.items():

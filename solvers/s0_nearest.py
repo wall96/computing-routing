@@ -18,6 +18,8 @@ def bfs(snapshot: Snapshot, src: str, task: Task, rate_req: float):
     q = deque([src])
     while q:
         u = q.popleft()
+        if not snapshot.can_relay(u, src):
+            continue
         for v in adj.get(u, []):
             if v in dist:
                 continue

@@ -65,6 +65,8 @@ def single_source(snapshot: Snapshot, source: str, task: Task, strategy: str,
         d, u = heappop(pq)
         if d > dist[u]:
             continue
+        if not snapshot.can_relay(u, source):
+            continue
         for v in adj.get(u, []):
             if banned_nodes and v in banned_nodes and v != source:
                 continue
@@ -168,6 +170,10 @@ def validate_and_build(snapshot: Snapshot, task: Task, node: Node,
                        enforce_energy: bool = True) -> Optional[Allocation]:
     """全部硬约束校验 + 组装 Allocation。任一不满足返回 None。"""
     if not path_pre or path_pre[0] != task.src or path_pre[-1] != node.id:
+        return None
+    # 终端只能作首/尾节点,不能出现在任何路径中间
+    if snapshot.endpoint_only and any(
+            n in snapshot.endpoint_only for p in [path_pre, *path_post_list] for n in p[1:-1]):
         return None
     t_comp = compute_latency_ms(node, task)
     d_pre = path_delay(snapshot, path_pre)

@@ -72,9 +72,11 @@ def run_event_simulation(sim):
             snapshot=build_snapshot(start,sim.all_nodes,sim.cfg,sim.scenario)
             for node in snapshot.nodes.values():node.reset_resources()
             sim.ledger.active.clear()
+            new_tasks=sim.gen.gen_for_slot(start,slot_index,snapshot=snapshot)
+            # 终端链路须在监视器统计链路数之前挂入
+            sim.attach_terminals(snapshot,[a.task for a in carry]+new_tasks)
             monitor=UtilizationMonitor(snapshot,m.record_resource_event)
             sim.ledger.event_sink=monitor.event
-            new_tasks=sim.gen.gen_for_slot(start,slot_index,snapshot=snapshot)
             for task in new_tasks:
                 m.record_attempt(task,generated_slot=slot_index,scheduled_t=task.arrival_t)
             counters=dict(accepted=0,rejected=0,finished=0,rerouted=0,reroute_failed=0)
@@ -109,7 +111,7 @@ def run_event_simulation(sim):
                 alloc=sim._solve(snapshot,task)
                 if alloc is None:
                     if old is None:
-                        m.record_reject(task,'no_feasible');counters['rejected']+=1
+                        m.record_reject(task,sim.reject_reason(snapshot,task));counters['rejected']+=1
                     else:
                         m.record_drop(old);m.task_terminal[task.id]='DROPPED';counters['reroute_failed']+=1
                     return None

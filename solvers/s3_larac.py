@@ -35,6 +35,8 @@ def _agg_dijkstra(snapshot, source, task, strategy, rate_req, bits, k, lam):
         d, u = heappop(pq)
         if d > dist[u]:
             continue
+        if not snapshot.can_relay(u, source):
+            continue
         for v in adj.get(u, []):
             lk = snapshot.get_link(u, v)
             if lk is None or not lk.alive or lk.bw_remain_mbps < rate_req:
