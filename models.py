@@ -19,6 +19,7 @@ class NodeType(str, Enum):
     EDGE = "EDGE"
     DC = "DC"
     ACCESS = "ACCESS"
+    TERMINAL = "TERMINAL"   # 地面随机终端:仅作业务源/目的,不计算、不转发
 
 
 class LinkType(str, Enum):
@@ -86,7 +87,7 @@ class Link:
 class Task:
     id: str
     src: str
-    dst_set: List[str]           # 目的 ACCESS(MC 多个;其它 == [src] 回源)
+    dst_set: List[str]           # 目的节点(MC 多个)
     biz: BizType
     priority: int
     mode: str                    # 'burst' | 'persist'
@@ -106,6 +107,9 @@ class Task:
     cycles_total: float = 0.0    # c_τ = D0·ω
     data_volume_bits: float = 0.0  # D0
     compute_rate: float = 0.0    # equivalent op/s = r0_bps·ω
+    # terminal 端点模式:源/目的终端地理坐标 (lat, lon),每片据此重算卫星覆盖
+    src_coord: Optional[Tuple[float, float]] = None
+    dst_coords: Optional[List[Tuple[float, float]]] = None
 
     @property
     def rate_bps(self) -> float:
@@ -166,7 +170,13 @@ class Snapshot:
     nodes: Dict[str, Node]
     links: Dict[Tuple[str, str], Link]
     compute_eligible: set = field(default_factory=set)   # 本场景可作算力节点的 type 集合(字符串)
+    endpoint_only: set = field(default_factory=set)      # 只能作路径首/尾、不能中转的节点ID(终端)
+    coverage: Dict[str, List[str]] = field(default_factory=dict)  # 终端ID → 当前可见卫星ID
     _adj: Optional[Dict[str, List[str]]] = None
+
+    def can_relay(self, node_id: str, source: str) -> bool:
+        """node_id 能否继续向外扩展:终端只允许作为本段路径的起点。"""
+        return node_id == source or node_id not in self.endpoint_only
 
     def link_key(self, u: str, v: str) -> Tuple[str, str]:
         return (u, v) if u < v else (v, u)

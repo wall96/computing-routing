@@ -271,6 +271,7 @@ class Metrics:
         reject_by_id = {t.id: reason for t, reason in self.rejects}
         generated_fields = [
             "task_id", "biz", "priority", "mode", "src", "dst_json",
+            "src_coord_json", "dst_coords_json",
             "rate_mbps", "delay_budget_ms", "loss_budget", "processing_logic",
             "cycles_per_bit", "cycles_per_bit_per_dst", "cycles_per_bit_effective",
             "fixed_processing_ms", "fixed_processing_ms_per_dst",
@@ -295,6 +296,8 @@ class Metrics:
                     "task_id": t.id, "biz": t.biz.value, "priority": t.priority,
                     "mode": t.mode, "src": t.src,
                     "dst_json": json.dumps(t.dst_set, ensure_ascii=False),
+                    "src_coord_json": json.dumps(t.src_coord) if t.src_coord else "",
+                    "dst_coords_json": json.dumps(t.dst_coords) if t.dst_coords else "",
                     "rate_mbps": t.rate_mbps, "delay_budget_ms": t.delay_budget_ms,
                     "loss_budget": t.loss_budget, "processing_logic": t.processing_logic,
                     "cycles_per_bit": t.cycles_per_bit,

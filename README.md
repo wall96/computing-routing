@@ -2,7 +2,7 @@
 
 按《项目总体设计文档.md》v5 实现:**单节点两段分解(前段载 D₀、后段载 D₀ρ)+ 在网计算压缩 + 多算法可插拔 + 三级场景 + 时变信道 + 能量硬约束**,主 KPI 为 **QoS 达标率**。
 
-默认所有业务均在卫星产生，源和目的都是当前场景中的卫星；地面EDGE/DC只提供可选算力，不作为业务端点。每个新动态拓扑时间片的片首，把所有尚未结束的活跃任务与本片新任务合并，按业务优先级重新计算算力节点和前/后段路径；片内拓扑、路径和资源分配保持不变。可通过 `algorithm.reroute_all_each_slot` 切换回仅断链时重算的兼容模式。
+默认（`traffic.endpoint_mode: terminal`）业务由地面随机终端产生：源和目的终端坐标在纬度带内随机撒点（LL/HR 的目的限定在源周围 `traffic.terminal.dst_max_km` 内）。每个时间片先按仰角门限计算终端被哪些卫星覆盖，终端只与这些卫星建立星地链路；数据上星计算后经星间链路下行到目的终端。终端只能作为路径首尾，不能计算或中转。覆盖为空时拒绝原因记为 `src_no_coverage` / `dst_no_coverage`。旧的卫星端点模式可用 `endpoint_mode: satellite` 恢复。每个新动态拓扑时间片的片首，把所有尚未结束的活跃任务与本片新任务合并，按业务优先级重新计算算力节点和前/后段路径；片内拓扑、路径和资源分配保持不变。可通过 `algorithm.reroute_all_each_slot` 切换回仅断链时重算的兼容模式。
 
 四类业务可分别配置 `processing_logic`、`cycles_per_bit_base`、`cycles_per_bit_per_dst`、`fixed_processing_ms`、`fixed_processing_ms_per_dst` 和 `Lref_bits`。节点功率上限按 `Pmax = eta × compute_capacity` 联合标定。
 

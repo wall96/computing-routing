@@ -16,6 +16,7 @@ from tests.test_event_accounting import tiny_snapshot,TinySimulator
 class BoundedTaskTest(unittest.TestCase):
     def test_duration_volume_and_work_are_clipped_without_resampling(self):
         cfg=yaml.safe_load((Path(__file__).resolve().parents[1]/'config.yaml').read_text(encoding='utf-8'))['traffic']
+        cfg.update(endpoint_mode='satellite')
         cfg.update(arrival_rate_per_slot={'LL':1},fixed_arrivals_per_slot={'LL':1},
                    independent_time_rng=True,time_seed=1042,arrival_at_slot_start=False)
         before=TaskGenerator(copy.deepcopy(cfg),[],30,seed=42)
@@ -36,6 +37,7 @@ class BoundedTaskTest(unittest.TestCase):
     def test_finish_events_at_horizon_are_completed_and_resources_released(self):
         cfg=yaml.safe_load((Path(__file__).resolve().parents[1]/'config.yaml').read_text(encoding='utf-8'))
         cfg['simulation'].update(t_start_sec=0,t_end_sec=60,slot_sec=30,event_driven_within_slot=True)
+        cfg['traffic'].update(endpoint_mode='satellite')   # tiny_snapshot 只有两颗无轨道卫星
         cfg['traffic'].update(arrival_rate_per_slot={'LL':1},fixed_arrivals_per_slot={'LL':1},
             independent_time_rng=True,time_seed=1042,arrival_at_slot_start=False,truncate_at_simulation_end=True)
         cfg['traffic']['qos']['LL']['duration_s']=[600,600]

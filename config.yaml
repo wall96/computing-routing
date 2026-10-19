@@ -142,8 +142,17 @@ channel:
 # ===================== 业务(A1/A2/A3) =====================
 traffic:
   truncate_at_simulation_end: true  # 生成时收短尾部会话，arrival+duration不超过simulation.t_end_sec
-  endpoint_mode: satellite      # 所有业务均在卫星产生，源和目的均为当前场景中的卫星
-  endpoint_types_by_biz:        # 场景3中GEO不能作为LL源或目的
+  # terminal: 源/目的均为地面随机终端;每片按卫星覆盖(仰角≥min_elevation_deg)上星,
+  #           星上(或场景允许的算力节点)计算后下行到目的终端。终端不计算、不中转。
+  # satellite: 源和目的均为卫星(旧默认); ground: 固定ACCESS地面站
+  endpoint_mode: terminal
+  terminal:
+    lat_range_deg: [-60, 60]    # 终端纬度带(按面积均匀撒点);L1倾角53°,更高纬覆盖稀疏
+    lon_range_deg: [-180, 180]
+    dst_max_km:                 # 目的终端距源的大圆距离上限;未列出的业务全球均匀抽取
+      LL: 2000                  # 20 ms 预算:上下行+ISL需留余量
+      HR: 5000
+  endpoint_types_by_biz:        # 仅satellite模式:场景3中GEO不能作为LL源或目的
     LL: [LEO]
     HR: [LEO, GEO]
     HC: [LEO, GEO]
@@ -156,7 +165,7 @@ traffic:
     - {from: 42,  to: 1000, mult: 0.6}
   qos:
     # 基础计算量 + 多目的附加计算量；固定开销按处理块/帧计。
-    # satellite模式下，dst_knn表示当前快照中按最短传播时延排序的最近N颗可达卫星。
+    # satellite模式下，dst_knn表示当前快照中按最短传播时延排序的最近N颗可达卫星(terminal模式忽略)。
     LL: {priority: 1, mode: burst,   delay_ms: 20,  loss: 0.01,   rate_mbps: [2, 10],    duration_s: [60, 300],   compression_rho: 0.10, processing_logic: low_latency_filter,              cycles_per_bit_base: 50,   cycles_per_bit_per_dst: 0,  fixed_processing_ms: 0.05, fixed_processing_ms_per_dst: 0,    Lref_bits: 12000,   dst_knn: 5}
     HR: {priority: 2, mode: burst,   delay_ms: 200, loss: 2.0e-4, rate_kbps: [10, 100],  duration_s: [120, 600],  compression_rho: 0.33, processing_logic: reliable_codec,                 cycles_per_bit_base: 200,  cycles_per_bit_per_dst: 0,  fixed_processing_ms: 0.10, fixed_processing_ms_per_dst: 0,    Lref_bits: 8000,    dst_knn: 10}
     HC: {priority: 3, mode: persist, delay_ms: 200, loss: 0.01,   rate_mbps: [100, 500], duration_s: [600, 1800], compression_rho: 0.20, processing_logic: heavy_content_codec,            cycles_per_bit_base: 1000, cycles_per_bit_per_dst: 0,  fixed_processing_ms: 1.00, fixed_processing_ms_per_dst: 0,    Lref_bits: 1000000}

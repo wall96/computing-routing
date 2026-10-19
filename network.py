@@ -11,7 +11,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 
 from models import Node, Link, LinkType, NodeType, Snapshot
-from topology import position_ecef, R_EARTH_M
+from topology import position_ecef, R_EARTH_M, _geodetic_to_ecef_m
 
 LIGHT_SPEED = 299_792_458.0
 ISL_REF_DIST_M = 5_000_000.0     # ISL 时变参考距离
@@ -281,3 +281,92 @@ def build_snapshot(t_sec: float, all_nodes: List[Node], cfg: dict, scenario: int
             continue
         links_dict[key] = lk
     return Snapshot(t=t_sec, nodes=nodes_dict, links=links_dict, compute_eligible=eligible)
+
+
+# ============= 地面终端接入 =============
+def _sat_table(snapshot: Snapshot, cfg: dict):
+    """本快照卫星 ID / ECEF 位置矩阵 / 最小仰角,按快照缓存。"""
+    cache = getattr(snapshot, "_sat_table", None)
+    if cache is not None:
+        return cache
+    lp = cfg["link_params"]
+    min_elev = {NodeType.LEO: lp["sgl_leo"]["min_elevation_deg"],
+                NodeType.GEO: lp["sgl_geo"]["min_elevation_deg"]}
+    sats = [n for n in snapshot.nodes.values() if n.type in min_elev]
+    ids = [n.id for n in sats]
+    pos = (np.stack([position_ecef(n, snapshot.t) for n in sats])
+           if sats else np.zeros((0, 3)))
+    thr = np.array([min_elev[n.type] for n in sats])
+    snapshot._sat_table = (ids, pos, thr)
+    return snapshot._sat_table
+
+
+def satellite_coverage(snapshot: Snapshot, lat: float, lon: float, cfg: dict
+                       ) -> List[Tuple[str, float]]:
+    """返回当前快照中覆盖 (lat, lon) 的卫星 [(sat_id, 仰角deg)],按仰角降序。
+
+    覆盖判据与 SGL 一致:LEO 仰角 ≥ sgl_leo.min_elevation_deg,GEO ≥ sgl_geo.min_elevation_deg。
+    """
+    ids, pos, thr = _sat_table(snapshot, cfg)
+    if not ids:
+        return []
+    gpos = _geodetic_to_ecef_m(lat, lon, 0.0)
+    los = pos - gpos
+    zenith = gpos / np.linalg.norm(gpos)
+    # 用逐元素乘加而非 @:macOS Accelerate 的 matmul 会误报浮点警告
+    cos_zen = np.clip((los * zenith).sum(axis=1) / np.linalg.norm(los, axis=1), -1.0, 1.0)
+    elev = 90.0 - np.degrees(np.arccos(cos_zen))
+    out = [(ids[i], float(elev[i])) for i in np.nonzero(elev >= thr)[0]]
+    out.sort(key=lambda x: -x[1])
+    return out
+
+
+def attach_terminals(snapshot: Snapshot, terminals: List[Tuple[str, float, float]],
+                     cfg: dict) -> None:
+    """把地面终端 [(id, lat, lon)] 挂到快照:先算卫星覆盖,再为每颗可见卫星建一条 SGL。
+
+    终端算力为 0、不在 compute_eligible 中,且登记到 endpoint_only,
+    求解器只能把它当作路径起点/终点,不能经它在卫星间中转。
+    """
+    beta_map = cfg["energy_link_beta_J_per_bit"]
+    lp = cfg["link_params"]
+    ch = cfg.get("channel", {})
+    tv = ch.get("time_varying", True)
+    sgl_floor = ch.get("sgl_rate_floor", 0.4)
+    sgl = {NodeType.LEO: (lp["sgl_leo"], LinkType.SGL_LEO, beta_map["SGL_LEO"]),
+           NodeType.GEO: (lp["sgl_geo"], LinkType.SGL_GEO, beta_map["SGL_GEO"])}
+    ids, pos, _ = _sat_table(snapshot, cfg)
+    row = {sid: i for i, sid in enumerate(ids)}
+    for tid, lat, lon in terminals:
+        if tid in snapshot.nodes:
+            continue
+        gpos = _geodetic_to_ecef_m(lat, lon, 0.0)
+        covered = []
+        for sid, elev in satellite_coverage(snapshot, lat, lon, cfg):
+            sat = snapshot.nodes[sid]
+            lcfg, ltype, beta = sgl[sat.type]
+            spos = pos[row[sid]]
+            lk = _mk_link(sid, tid, ltype, lcfg["bw_mbps"], lcfg["loss_rate"], lcfg["jitter_ms"],
+                          beta, _delay_ms(spos, gpos),
+                          _sgl_factor(elev, lcfg["min_elevation_deg"], sgl_floor, tv))
+            snapshot.links[snapshot.link_key(sid, tid)] = lk
+            covered.append(sid)
+        # 覆盖计算用的是挂接前的卫星表,终端节点最后再加入
+        snapshot.nodes[tid] = Node(id=tid, type=NodeType.TERMINAL, capacity_total=0.0,
+                                   capacity_remain=0.0, eta=0.0, power_budget_W=0.0,
+                                   power_remain_W=0.0, lat=lat, lon=lon)
+        snapshot.endpoint_only.add(tid)
+        snapshot.coverage[tid] = covered
+    snapshot._adj = None
+
+
+def terminals_of(tasks) -> List[Tuple[str, float, float]]:
+    """从任务中收集需要挂接的终端 (id, lat, lon)。"""
+    out = []
+    for tk in tasks:
+        if tk.src_coord is None:
+            continue
+        out.append((tk.src, *tk.src_coord))
+        for dst, coord in zip(tk.dst_set, tk.dst_coords or []):
+            out.append((dst, *coord))
+    return out
