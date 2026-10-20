@@ -13,6 +13,9 @@ src|文本|业务源节点ID；terminal模式为地面随机终端UT-<task_id>-S
 dst_json|JSON数组|目的节点ID列表；MC可有多个目的。用json.loads解析，不能按逗号手工拆分。
 src_coord_json|JSON数组/空|terminal模式下源终端[纬度,经度]（度）；其它模式为空。
 dst_coords_json|JSON嵌套数组/空|terminal模式下各目的终端[纬度,经度]，顺序与dst_json一致；其它模式为空。
+packet_bits|bit|包模型下一个业务数据包大小D；时延=传播+传输(D/链路速率)+计算(∝D)。0表示旧流式模型。
+n_splits|个|该次分配拆分的子包数；1表示未拆分(单节点)。
+splits_json|JSON数组|拆分时各子包的算力节点、比例share、前/后段路径、计算时延与到达时刻finish_ms；未拆分为空数组。
 dst|分号文本|目的节点列表用分号连接的显示形式，见tasks.csv；与dst_json的JSON编码不同。
 priority|整数|业务优先级，数字越小越优先；现行LL/HR/HC/MC依次为1/2/3/4。
 mode|文本|任务生成模式burst或persist等标签；不能单凭该字段判断仿真是否启用片内精确事件引擎。

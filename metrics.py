@@ -123,6 +123,11 @@ class Metrics:
             "energy_compute_J": a.energy_compute_J,
             "energy_tx_J": a.energy_tx_J,
             "energy_total_J": a.energy_total_J,
+            "n_splits": max(1, len(a.splits)),
+            "splits_json": json.dumps([
+                {"node": s.node, "share": s.share, "path_pre": s.path_pre,
+                 "path_post": s.path_post, "compute_latency_ms": s.compute_latency_ms,
+                 "finish_ms": s.finish_ms} for s in a.splits], ensure_ascii=False),
         })
         if self.meta.get("segment_accounting"):
             self._history_index[a.allocation_id]=len(self._allocation_history)-1
@@ -271,7 +276,7 @@ class Metrics:
         reject_by_id = {t.id: reason for t, reason in self.rejects}
         generated_fields = [
             "task_id", "biz", "priority", "mode", "src", "dst_json",
-            "src_coord_json", "dst_coords_json",
+            "src_coord_json", "dst_coords_json", "packet_bits",
             "rate_mbps", "delay_budget_ms", "loss_budget", "processing_logic",
             "cycles_per_bit", "cycles_per_bit_per_dst", "cycles_per_bit_effective",
             "fixed_processing_ms", "fixed_processing_ms_per_dst",
@@ -297,6 +302,7 @@ class Metrics:
                     "mode": t.mode, "src": t.src,
                     "dst_json": json.dumps(t.dst_set, ensure_ascii=False),
                     "src_coord_json": json.dumps(t.src_coord) if t.src_coord else "",
+                    "packet_bits": t.packet_bits,
                     "dst_coords_json": json.dumps(t.dst_coords) if t.dst_coords else "",
                     "rate_mbps": t.rate_mbps, "delay_budget_ms": t.delay_budget_ms,
                     "loss_budget": t.loss_budget, "processing_logic": t.processing_logic,
@@ -327,7 +333,7 @@ class Metrics:
             "cycles_per_bit_effective", "fixed_processing_ms_total",
             "compute_rate_used", "power_used_W", "compute_latency_ms", "max_delay_ms",
             "max_loss", "delivered_data_bits", "energy_compute_J", "energy_tx_J",
-            "energy_total_J",
+            "energy_total_J", "n_splits", "splits_json",
         ]
         if self.meta.get("segment_accounting"):
             allocation_fields += ["service_t_end", "service_duration_s"]

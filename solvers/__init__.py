@@ -7,6 +7,8 @@ from solvers.s2_ksp import S2KSP
 from solvers.s3_larac import S3Larac
 from solvers.s4_aco import S4Aco
 from solvers.s5_milp import S5Milp
+from solvers.s6_waterfill import S6WaterFill
+from solvers.s7_split_lp import S7SplitLP
 
 _REGISTRY = {
     "S0": S0Nearest,
@@ -15,6 +17,8 @@ _REGISTRY = {
     "S3": S3Larac,
     "S4": S4Aco,
     "S5": S5Milp,
+    "S6": S6WaterFill,     # 拆分卸载:等完成时间注水法
+    "S7": S7SplitLP,       # 拆分卸载:按 τ 分段线性规划
 }
 
 

@@ -154,6 +154,7 @@ traffic:
     dst_max_km:                 # 目的终端距源的大圆距离上限;未列出的业务全球均匀抽取
       LL: 2000                  # 20 ms 预算:上下行+ISL需留余量
       HR: 5000
+    mc_cluster_radius_km: 300   # MC 多目的成簇:先取簇中心,再在该半径内撒目的终端
   endpoint_types_by_biz:        # 仅satellite模式:场景3中GEO不能作为LL源或目的
     LL: [LEO]
     HR: [LEO, GEO]
@@ -167,12 +168,14 @@ traffic:
     - {from: 42,  to: 1000, mult: 0.6}
   qos:
     # 基础计算量 + 多目的附加计算量；固定开销按处理块/帧计。
+    # packet_bits:包模型的业务包大小D范围(bit),每任务独立均匀抽取(packet_seed)。
+    #   时延 = 传播 + 传输(D/链路速率,直通转发取瓶颈) + 计算(固定开销 + x·D·ω/C)。
+    #   删除 packet_bits 即回到旧流式模型(只算传播 + 单块Lref计算)。
     # satellite模式下，dst_knn表示当前快照中按最短传播时延排序的最近N颗可达卫星(terminal模式忽略)。
-    LL: {priority: 1, mode: burst,   delay_ms: 20,  loss: 0.01,   rate_mbps: [2, 10],    duration_s: [60, 300],   compression_rho: 0.10, processing_logic: low_latency_filter,              cycles_per_bit_base: 50,   cycles_per_bit_per_dst: 0,  fixed_processing_ms: 0.05, fixed_processing_ms_per_dst: 0,    Lref_bits: 12000,   dst_knn: 5}
-    HR: {priority: 2, mode: burst,   delay_ms: 200, loss: 2.0e-4, rate_kbps: [10, 100],  duration_s: [120, 600],  compression_rho: 0.33, processing_logic: reliable_codec,                 cycles_per_bit_base: 200,  cycles_per_bit_per_dst: 0,  fixed_processing_ms: 0.10, fixed_processing_ms_per_dst: 0,    Lref_bits: 8000,    dst_knn: 10}
-    HC: {priority: 3, mode: persist, delay_ms: 200, loss: 0.01,   rate_mbps: [100, 500], duration_s: [600, 1800], compression_rho: 0.20, processing_logic: heavy_content_codec,            cycles_per_bit_base: 1000, cycles_per_bit_per_dst: 0,  fixed_processing_ms: 1.00, fixed_processing_ms_per_dst: 0,    Lref_bits: 1000000}
-    MC: {priority: 4, mode: persist, delay_ms: 200, loss: 0.01,   rate_kbps: [10, 100],  duration_s: [600, 1800], compression_rho: 0.05, processing_logic: multicast_aggregate_replicate, cycles_per_bit_base: 40,   cycles_per_bit_per_dst: 15, fixed_processing_ms: 0.10, fixed_processing_ms_per_dst: 0.02, Lref_bits: 12000,   k_dst: 3}
-
+    LL: {priority: 1, mode: burst,   delay_ms: 20,  loss: 0.01,   rate_mbps: [2, 10],    duration_s: [60, 300],   compression_rho: 0.10, processing_logic: low_latency_filter,              cycles_per_bit_base: 50,   cycles_per_bit_per_dst: 0,  fixed_processing_ms: 0.05, fixed_processing_ms_per_dst: 0,    Lref_bits: 12000,   dst_knn: 5, packet_bits: [500000, 2000000]}
+    HR: {priority: 2, mode: burst,   delay_ms: 200, loss: 2.0e-4, rate_kbps: [10, 100],  duration_s: [120, 600],  compression_rho: 0.33, processing_logic: reliable_codec,                 cycles_per_bit_base: 200,  cycles_per_bit_per_dst: 0,  fixed_processing_ms: 0.10, fixed_processing_ms_per_dst: 0,    Lref_bits: 8000,    dst_knn: 10, packet_bits: [100000, 500000]}
+    HC: {priority: 3, mode: persist, delay_ms: 200, loss: 0.01,   rate_mbps: [100, 500], duration_s: [600, 1800], compression_rho: 0.20, processing_logic: heavy_content_codec,            cycles_per_bit_base: 1000, cycles_per_bit_per_dst: 0,  fixed_processing_ms: 1.00, fixed_processing_ms_per_dst: 0,    Lref_bits: 1000000, packet_bits: [10000000, 40000000]}
+    MC: {priority: 4, mode: persist, delay_ms: 200, loss: 0.01,   rate_kbps: [10, 100],  duration_s: [600, 1800], compression_rho: 0.05, processing_logic: multicast_aggregate_replicate, cycles_per_bit_base: 40,   cycles_per_bit_per_dst: 15, fixed_processing_ms: 0.10, fixed_processing_ms_per_dst: 0.02, Lref_bits: 12000,   k_dst: 3, packet_bits: [200000, 1000000]}
 # ===================== 算法参数 =====================
 algorithm:
   load_balance_k: 4              # 旧接口参数；S1的balance现采用分配后平方利用率增量
@@ -185,4 +188,8 @@ algorithm:
   ksp_K: 3                       # S2 Yen 的 K
   larac_max_iter: 20             # S3 迭代上限
   aco: {ants: 8, iters: 8, alpha: 1.0, beta: 2.0, evap: 0.3, q: 1.0}
+  split:                         # S6/S7 拆分卸载
+    max_splits: 0                # 子包数上限;0=不限(由算法按收益决定),1=不拆分(单节点基线)
+    lp_max_candidates: 12        # S7 每任务参与 LP 的候选数上限(按固定时延 d 升序)
+    lp_per_uplink: 2             # S7 每条上行星地链路最多保留的候选数
   milp: {max_nodes: 80, max_tasks_per_slot: 15}   # S5 仅小规模

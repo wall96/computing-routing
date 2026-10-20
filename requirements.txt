@@ -1,3 +1,4 @@
 numpy
 PyYAML
 pulp
+scipy==1.13.1

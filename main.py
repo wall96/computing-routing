@@ -13,7 +13,7 @@ def parse_args():
     p.add_argument("--config", default="config.yaml")
     p.add_argument("--scenario", type=int, choices=[1, 2, 3], default=None)
     p.add_argument("--strategy", choices=["latency", "balance", "energy"], default=None)
-    p.add_argument("--solver", choices=["S0", "S1", "S2", "S3", "S4", "S5"], default=None)
+    p.add_argument("--solver", choices=["S0", "S1", "S2", "S3", "S4", "S5", "S6", "S7"], default=None)
     p.add_argument("--t-end", type=float, default=None)
     p.add_argument("--slot", type=float, default=None)
     p.add_argument("--seed", type=int, default=None)
