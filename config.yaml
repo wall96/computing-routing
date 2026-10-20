@@ -95,9 +95,12 @@ ground:
 # 统一按低精度 Tensor 等效吞吐标定，不与 FP32/FP64 峰值混用。
 # LEO≈单个低功耗AI模块；GEO≈多模块；EDGE≈4卡推理服务器；DC≈单台8卡AI服务器。
 # 与下面 η、功率上限联合标定：Pmax = η × Cmax。
+# 写成 [lo, hi] 表示每颗星在区间内独立均匀抽取(compute_capacity_seed 固定),
+# 该星功率上限随之按 Pmax = η × Cmax 给出,compute_power_budget_W 中对应项不再使用。
+compute_capacity_seed: 7
 compute_capacity_tflops:
-  LEO:    400       # 用户区间300~500的中值
-  GEO:    1350      # 用户区间1200~1500的中值
+  LEO:    [10, 20]        # 每颗 LEO 10~20 TFLOPS 随机分布(原 400 的 1/40~1/20)
+  GEO:    [33.75, 67.5]   # 按 LEO 同比例缩减:原 1350 的 1/40~1/20,每颗随机
   EDGE:   6000      # 约4×1466 Tensor TFLOPS
   DC:     32000     # 约1台DGX H100的32 PFLOPS FP8
   ACCESS: 0
