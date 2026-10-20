@@ -94,6 +94,34 @@ def stats(rows, key):
             "min": xs[0], "max": xs[-1]}
 
 
+def compute_match(sim, m):
+    """每个时间片:在服 HC 的算力需求 vs 卫星算力(每片全部重路由,按 t_alloc 分组即为该片在服集合)。"""
+    cap = {n.id: n.capacity_total for n in sim.all_nodes if n.type.value in ("LEO", "GEO")}
+    eligible_cap = sum(c for nid, c in cap.items()
+                       if nid.startswith(tuple(sim.cfg["constellation"]["scenario_shells"][sim.scenario])))
+    by_t = {}
+    for r in m._allocation_history:
+        by_t.setdefault(r["t_alloc"], []).append(r)
+    rows = []
+    for t in sorted(by_t):
+        load, cnt = {}, Counter()
+        for r in by_t[t]:
+            load[r["compute_node"]] = load.get(r["compute_node"], 0.0) + r["compute_rate_used"]
+            cnt[r["compute_node"]] += 1
+        util = {nid: v / cap[nid] for nid, v in load.items()}
+        demand = sum(load.values())
+        rows.append({
+            "t": t, "active_tasks": len(by_t[t]), "busy_sats": len(load),
+            "demand_TFLOPS": demand / 1e12, "capacity_TFLOPS": eligible_cap / 1e12,
+            "constellation_util_%": 100 * demand / eligible_cap,
+            "mean_busy_sat_util_%": 100 * statistics.mean(util.values()),
+            "max_sat_util_%": 100 * max(util.values()),
+            "max_tasks_on_one_sat": max(cnt.values()),
+            "sats_over_80%": sum(u > 0.8 for u in util.values()),
+        })
+    return rows
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default=str(ROOT / "config.yaml"))
@@ -137,6 +165,9 @@ def main():
         m = sim2.run()
     m.export(str(out / "sim"))
     accepted = {r["task_id"] for r in m._allocation_history if r["event_type"] == "INITIAL"}
+    cm_rows = compute_match(sim2, m)
+    with open(out / "compute_match_by_slot.csv", "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.DictWriter(f, fieldnames=list(cm_rows[0])); w.writeheader(); w.writerows(cm_rows)
     meta = {
         "scenario": args.scenario, "t_end": args.t_end, "solver": "S0",
         "breakdown_tasks": len(rows), "breakdown_no_path": no_path,
@@ -145,6 +176,16 @@ def main():
         "sim_tasks": len(m.attempts), "sim_accepted": len(accepted),
         "sim_reject_reasons": dict(Counter(r for _, r in m.rejects)),
         "sim_dropped": len(m.dropped_ids),
+        "compute_match": {
+            "peak_active_tasks": max(r["active_tasks"] for r in cm_rows),
+            "peak_demand_TFLOPS": max(r["demand_TFLOPS"] for r in cm_rows),
+            "constellation_capacity_TFLOPS": cm_rows[0]["capacity_TFLOPS"],
+            "peak_constellation_util_%": max(r["constellation_util_%"] for r in cm_rows),
+            "max_sat_util_%": max(r["max_sat_util_%"] for r in cm_rows),
+            "max_tasks_on_one_sat": max(r["max_tasks_on_one_sat"] for r in cm_rows),
+            "peak_busy_sats": max(r["busy_sats"] for r in cm_rows),
+            "sat_slots_over_80%": sum(r["sats_over_80%"] for r in cm_rows),
+        },
     }
     json.dump(meta, open(out / "run_meta.json", "w"), indent=2, ensure_ascii=False)
     print(json.dumps(meta, indent=2, ensure_ascii=False))

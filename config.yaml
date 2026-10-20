@@ -130,11 +130,13 @@ energy_link_beta_J_per_bit:
   SGL_GEO:      1.2e-7
 
 # ===================== 链路参数(标称) =====================
+# 按 HC 1~10 Gbps 标定:SGL 低仰角只剩 sgl_rate_floor=0.4,标称 30 Gbps → 最差仍有 12 Gbps;
+# ISL 取激光链路量级 100 Gbps(远距离下限 0.7 → 70 Gbps)。
 link_params:
-  isl_leo_leo: {bw_mbps: 10000, loss_rate: 1.0e-6, jitter_ms: 0.1}
-  isl_leo_geo: {bw_mbps: 2000,  loss_rate: 1.0e-5, jitter_ms: 0.5}
-  sgl_leo:     {bw_mbps: 1000,  loss_rate: 1.0e-5, jitter_ms: 1.0, min_elevation_deg: 25}
-  sgl_geo:     {bw_mbps: 1000,  loss_rate: 1.0e-5, jitter_ms: 1.0, min_elevation_deg: 5}
+  isl_leo_leo: {bw_mbps: 100000, loss_rate: 1.0e-6, jitter_ms: 0.1}
+  isl_leo_geo: {bw_mbps: 20000, loss_rate: 1.0e-5, jitter_ms: 0.5}
+  sgl_leo:     {bw_mbps: 30000, loss_rate: 1.0e-5, jitter_ms: 1.0, min_elevation_deg: 25}
+  sgl_geo:     {bw_mbps: 30000, loss_rate: 1.0e-5, jitter_ms: 1.0, min_elevation_deg: 5}
   ter:         {bw_mbps: 100000,loss_rate: 1.0e-7, jitter_ms: 0.05}
 
 # ===================== 时变信道(C3) =====================
