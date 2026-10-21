@@ -118,15 +118,20 @@ def summarize_isolated(rows):
     out = []
     for lab, _, _ in VARIANTS:
         ok = [r for r in rows if r.get(f"{lab}|total_ms", "") != ""]
+        if not ok:
+            out.append({"variant": lab, "tasks": len(rows), "feasible": 0})
+            continue
         tot = [r[f"{lab}|total_ms"] for r in ok]
         sp = [r[f"{lab}|splits"] for r in ok]
         both = [r for r in ok if r.get("单节点最优|total_ms", "") != ""]
         gain = [1 - r[f"{lab}|total_ms"] / r["单节点最优|total_ms"] for r in both]
         split_rows = [r for r in both if r[f"{lab}|splits"] > 1]
+        rescued = [r for r in ok if r.get("单节点最优|total_ms", "") == ""]   # 单节点不可行、本算法可行
         rec = {"variant": lab, "tasks": len(rows), "feasible": len(ok),
+               "rescued_vs_single": len(rescued),
                "total_mean_ms": statistics.mean(tot), "total_p50_ms": q(tot, .5),
                "total_p95_ms": q(tot, .95), "total_max_ms": max(tot),
-               "vs_single_mean_%": 100 * statistics.mean(gain),
+               "vs_single_mean_%": 100 * statistics.mean(gain) if gain else float("nan"),
                "split_tasks": len(split_rows), "split_tasks_%": 100 * len(split_rows) / len(ok),
                "split_gain_over_0.1ms": sum(
                    r["单节点最优|total_ms"] - r[f"{lab}|total_ms"] > 0.1 for r in split_rows),
@@ -196,8 +201,9 @@ def full_sim(base_cfg, scenario, t_end):
 
 
 def write_csv(path, rows):
+    fields = list(dict.fromkeys(k for r in rows for k in r))     # 不可行的任务缺少部分列
     with open(path, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=list(rows[0]))
+        w = csv.DictWriter(f, fieldnames=fields, restval="")
         w.writeheader()
         w.writerows(rows)
 
