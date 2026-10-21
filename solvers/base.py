@@ -199,18 +199,39 @@ def segment_tx_ms(snapshot: Snapshot, path: List[str], load: Dict[Tuple[str, str
     return t
 
 
-def evaluate_splits(snapshot: Snapshot, task: Task, parts):
+def split_overhead_ms(task: Task, coef_s_per_Tbit: float) -> float:
+    """拆分开销:与整包大小成正比,coef 秒 / Tbit(默认 0.01,即 1 Tbit 拆分耗时 0.01 s)。"""
+    return coef_s_per_Tbit * task.packet_bits / 1e12 * 1000.0
+
+
+def evaluate_splits(snapshot: Snapshot, task: Task, parts, split_coef: float = 0.0):
     """包模型下逐子包到达时间。parts: [(node, share, path_pre, path_post_list)]。
 
-    子包 k 到达目的 j 的时刻 = 前段传播 + 前段传输 + 计算(share) + 后段传播 + 后段传输;
-    整包时延取所有子包、所有目的中最晚者;整包丢失 = 任一子包丢失。
+    单个子包(不拆分):直通转发,时延 = 前段传播 + 前段传输 + 计算 + 后段传播 + 后段传输。
+    多个子包(星上拆分):终端无算力不能拆,整包先上行到接入卫星(各子包 path_pre 的第二个节点),
+      接入卫星收齐整包、耗时 split_overhead 完成拆分后,各子包再经星间链路分别送往算力节点:
+      t_k = 上行传播 + 整包上行传输 + 拆分开销 + 星间传播 + 星间传输 + 计算(share) + 后段传播 + 后段传输。
+    同一任务的子包共用链路时比特累加(串行发送,保守)。整包时延取最晚者;整包丢失 = 任一子包丢失。
     返回 (max_delay_ms, max_loss, [各子包最晚到达 ms], [各子包计算时延 ms])。
     """
     load = split_edge_bits(task, [(s, pre, posts) for _, s, pre, posts in parts])
     finishes, comps = [], []
     surv_by_dst = [1.0] * len(task.dst_set)
+    split_at_access = len(parts) > 1 and task.src in snapshot.endpoint_only
+    if split_at_access:
+        up = parts[0][2][:2]                  # 终端 → 接入卫星(各子包共用)
+        up_ms = (path_delay(snapshot, up) + segment_tx_ms(snapshot, up, load)
+                 + split_overhead_ms(task, split_coef))
+    elif len(parts) > 1:
+        up_ms = split_overhead_ms(task, split_coef)   # 源本身是卫星:直接在源上拆
     for node, share, pre, posts in parts:
-        head = path_delay(snapshot, pre) + segment_tx_ms(snapshot, pre, load)
+        if split_at_access:
+            isl = pre[1:]
+            head = up_ms + path_delay(snapshot, isl) + segment_tx_ms(snapshot, isl, load)
+        elif len(parts) > 1:
+            head = up_ms + path_delay(snapshot, pre) + segment_tx_ms(snapshot, pre, load)
+        else:
+            head = path_delay(snapshot, pre) + segment_tx_ms(snapshot, pre, load)
         t_comp = compute_latency_ms(node, task, share)
         surv_pre = path_survive(snapshot, pre)
         f = 0.0
@@ -238,10 +259,12 @@ def _paths_ok(snapshot: Snapshot, task: Task, node_id: str, pre, posts) -> bool:
 
 
 def build_split_allocation(snapshot: Snapshot, task: Task, parts, strategy: str,
-                           solver_name: str, enforce_energy: bool = True) -> Optional[Allocation]:
+                           solver_name: str, enforce_energy: bool = True,
+                           split_coef: float = 0.0) -> Optional[Allocation]:
     """拆分方案的全部硬约束校验 + 组装。parts: [(node, share, path_pre, path_post_list)]。
 
     带宽/算力/功率按比例 share 占用;时延、丢包按 evaluate_splits 精确核算。
+    源为终端且拆分时,所有子包必须经同一颗接入卫星(终端不能拆,只能整包上行)。
     """
     parts = [p for p in parts if p[1] > 1e-9]
     if not parts or abs(sum(p[1] for p in parts) - 1.0) > 1e-6:
@@ -251,7 +274,10 @@ def build_split_allocation(snapshot: Snapshot, task: Task, parts, strategy: str,
     for node, _, pre, posts in parts:
         if not _paths_ok(snapshot, task, node.id, pre, posts):
             return None
-    max_delay, max_loss, finishes, comps = evaluate_splits(snapshot, task, parts)
+    if len(parts) > 1 and task.src in snapshot.endpoint_only:
+        if len({p[2][1] for p in parts}) != 1:
+            return None                   # 子包来自不同上行链路 = 在终端拆分,不允许
+    max_delay, max_loss, finishes, comps = evaluate_splits(snapshot, task, parts, split_coef)
     if max_delay > task.delay_budget_ms or max_loss > task.loss_budget:
         return None
 

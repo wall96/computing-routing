@@ -194,8 +194,11 @@ algorithm:
   ksp_K: 3                       # S2 Yen 的 K
   larac_max_iter: 20             # S3 迭代上限
   aco: {ants: 8, iters: 8, alpha: 1.0, beta: 2.0, evap: 0.3, q: 1.0}
-  split:                         # S6/S7 拆分卸载
+  split:                         # S6/S7 拆分卸载:终端不能拆,整包上行到接入卫星后在星上拆分
     max_splits: 0                # 子包数上限;0=不限(由算法按收益决定),1=不拆分(单节点基线)
+    overhead_s_per_Tbit: 0.01    # 拆分开销 ∝ 包大小:1 Tbit 拆分耗时 0.01 s
+    min_gain_ms: 0.0             # 拆分比不拆分至少快这么多才拆
+    max_access: 3                # 候选拆分点:上行最快的前 N 颗覆盖卫星
     lp_max_candidates: 12        # S7 每任务参与 LP 的候选数上限(按固定时延 d 升序)
     lp_per_uplink: 2             # S7 每条上行星地链路最多保留的候选数
   milp: {max_nodes: 80, max_tasks_per_slot: 15}   # S5 仅小规模

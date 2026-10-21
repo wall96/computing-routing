@@ -1,4 +1,7 @@
-"""Split offloading (S6 water-filling, S7 τ-segmented LP) under the packet delay model."""
+"""Satellite-side split offloading (S6 water-filling, S7 τ-segmented LP), packet delay model.
+
+终端无算力不能拆:整包上行到接入卫星 g,在 g 上拆分后经星间链路送往多个算力节点。
+"""
 from pathlib import Path
 import sys
 import unittest
@@ -7,22 +10,26 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from models import Node, NodeType, Link, LinkType, Snapshot, Task, BizType
 from resources import ResourceLedger
 from solvers import make_solver
-from solvers.base import evaluate_splits
+from solvers.base import evaluate_splits, build_split_allocation, split_overhead_ms
 
-CFG = {'algorithm': {'split': {}, 'enforce_energy_budget': True}}
 D = 40e6          # 40 Mbit 包
 RHO = 0.2
 
 
-def sat(nid):
-    return Node(nid, NodeType.LEO, 1e15, 1e15, 1e-13, 1e6, 1e6)
+def cfg(**split):
+    return {'algorithm': {'split': {'overhead_s_per_Tbit': 0.01, **split},
+                          'enforce_energy_budget': True}}
+
+
+def sat(nid, cap=1e15):
+    return Node(nid, NodeType.LEO, cap, cap, 1e-13, 1e6, 1e6)
 
 
 def term(nid):
     return Node(nid, NodeType.TERMINAL, 0, 0, 0, 0, 0)
 
 
-def link(u, v, delay, bw=1000.0, kind=LinkType.SGL_LEO):
+def link(u, v, delay, bw, kind):
     return Link(u, v, kind, bw, bw, delay, 1e-7, 0, 1e-9)
 
 
@@ -32,96 +39,113 @@ def snap(nodes, links):
     return Snapshot(0, ns, ls, {'LEO'}, endpoint_only={n.id for n in nodes if n.type == NodeType.TERMINAL})
 
 
-def task(packet=D, budget=200.0):
-    return Task('T', 'A', ['B'], BizType.HC, 3, 'persist', 10, budget, .01, 100, 12000, 0, 60, RHO,
-                cycles_total=10e6 * 100 * 60, data_volume_bits=10e6 * 60, compute_rate=10e6 * 100,
-                packet_bits=packet)
+def task(packet=D, budget=500.0, omega=3000):
+    rate = 10e6
+    return Task('T', 'A', ['B'], BizType.HC, 3, 'persist', rate / 1e6, budget, .01, omega, 12000, 0, 60,
+                RHO, cycles_total=rate * omega * 60, data_volume_bits=rate * 60,
+                compute_rate=rate * omega, packet_bits=packet)
 
 
-def independent():
-    """A 经三颗卫星到 B,上下行链路各不相同:子包完全独立。"""
-    nodes = [term('A'), term('B'), sat('s1'), sat('s2'), sat('s3')]
-    links = [link('A', 's1', 3), link('s1', 'B', 3),
-             link('A', 's2', 5), link('s2', 'B', 5),
-             link('A', 's3', 8), link('s3', 'B', 8)]
+def fanout(isl_bw=10000.0, down_bw=2000.0, cap=20e12):
+    """A→g 上行;g 经三条星间链路到 c1/c2/c3(算力较小);各自下行到 B。"""
+    SGL, ISL = LinkType.SGL_LEO, LinkType.ISL_LEO_LEO
+    nodes = [term('A'), term('B'), sat('g', 1.0), sat('c1', cap), sat('c2', cap), sat('c3', cap)]
+    links = [link('A', 'g', 3, 20000, SGL),
+             link('g', 'c1', 2, isl_bw, ISL), link('g', 'c2', 3, isl_bw, ISL), link('g', 'c3', 4, isl_bw, ISL),
+             link('c1', 'B', 3, down_bw, SGL), link('c2', 'B', 3, down_bw, SGL), link('c3', 'B', 3, down_bw, SGL)]
     return snap(nodes, links)
 
 
-def shared_downlink():
-    """A 有两条上行,但 B 只被 s3 覆盖:所有子包共用 s3→B 下行。"""
-    nodes = [term('A'), term('B'), sat('s1'), sat('s2'), sat('s3')]
-    links = [link('A', 's1', 3), link('A', 's2', 4), link('s3', 'B', 3, bw=200.0),
-             link('s1', 's3', 2, 10000, LinkType.ISL_LEO_LEO),
-             link('s2', 's3', 2, 10000, LinkType.ISL_LEO_LEO)]
+def two_uplinks():
+    """A 能看到 g1、g2 两颗卫星,各连一个算力节点。"""
+    SGL, ISL = LinkType.SGL_LEO, LinkType.ISL_LEO_LEO
+    nodes = [term('A'), term('B'), sat('g1', 1.0), sat('g2', 1.0), sat('c1', 20e12), sat('c2', 20e12)]
+    links = [link('A', 'g1', 3, 2000, SGL), link('A', 'g2', 3, 2000, SGL),
+             link('g1', 'c1', 2, 10000, ISL), link('g2', 'c2', 2, 10000, ISL),
+             link('c1', 'B', 3, 2000, SGL), link('c2', 'B', 3, 2000, SGL)]
     return snap(nodes, links)
 
 
-def single(snapshot, t):
-    cfg = {'algorithm': {'split': {'max_splits': 1}, 'enforce_energy_budget': True}}
-    return make_solver('S6', cfg).solve(snapshot, t, 'latency')
+def solve(name, s, t, **split):
+    return make_solver(name, cfg(**split)).solve(s, t, 'latency')
 
 
-class SplitTest(unittest.TestCase):
-    def test_waterfill_equal_finish_and_beats_single(self):
-        s, t = independent(), task()
-        a = make_solver('S6', CFG).solve(s, t, 'latency')
-        one = single(s, t)
-        self.assertGreater(len(a.splits), 1)
-        self.assertAlmostEqual(sum(x.share for x in a.splits), 1.0)
-        finishes = [x.finish_ms for x in a.splits]
-        self.assertAlmostEqual(max(finishes), min(finishes), places=6)   # 等完成时间
-        self.assertLess(a.max_delay_ms, one.max_delay_ms - 5)
-        # 报告的时延就是精确核算值
+class SatelliteSplitTest(unittest.TestCase):
+    def test_split_happens_on_access_satellite(self):
+        s, t = fanout(), task()
+        for name in ('S6', 'S7'):
+            a = solve(name, s, t)
+            self.assertGreater(len(a.splits), 1, name)
+            # 所有子包共用同一条上行 A→g,在 g 上拆分
+            self.assertEqual({x.path_pre[:2] == ['A', 'g'] for x in a.splits}, {True}, name)
+            self.assertAlmostEqual(sum(x.share for x in a.splits), 1.0)
+            self.assertLess(a.max_delay_ms, solve(name, s, t, max_splits=1).max_delay_ms - 5, name)
+
+    def test_waterfill_equal_finish(self):
+        s, t = fanout(), task()
+        a = solve('S6', s, t)
+        f = [x.finish_ms for x in a.splits]
+        self.assertAlmostEqual(max(f), min(f), places=6)
         parts = [(s.nodes[x.node], x.share, x.path_pre, x.path_post) for x in a.splits]
-        self.assertAlmostEqual(evaluate_splits(s, t, parts)[0], a.max_delay_ms)
+        self.assertAlmostEqual(evaluate_splits(s, t, parts, 0.01)[0], a.max_delay_ms)
+
+    def test_split_delay_includes_full_uplink_and_overhead(self):
+        s, t = fanout(), task()
+        a = solve('S6', s, t)
+        up = 3 + D / 20000e6 * 1000                     # 上行传播 + 整包上行传输(存储转发)
+        self.assertGreater(min(x.finish_ms for x in a.splits), up + split_overhead_ms(t, 0.01))
+
+    def test_terminal_side_split_rejected(self):
+        s, t = two_uplinks(), task()
+        parts = [(s.nodes['c1'], .5, ['A', 'g1', 'c1'], [['c1', 'B']]),
+                 (s.nodes['c2'], .5, ['A', 'g2', 'c2'], [['c2', 'B']])]
+        self.assertIsNone(build_split_allocation(s, t, parts, 'latency', 'X', True, 0.01))
+        for name in ('S6', 'S7'):
+            a = solve(name, s, t)
+            self.assertEqual(a.splits, [], name)      # 只能经单条上行,唯一算力节点 → 不拆
 
     def test_lp_matches_waterfill_when_independent(self):
-        s, t = independent(), task()
-        wf = make_solver('S6', CFG).solve(s, t, 'latency')
-        lp = make_solver('S7', CFG).solve(s, t, 'latency')
-        self.assertAlmostEqual(lp.max_delay_ms, wf.max_delay_ms, places=4)
+        s, t = fanout(), task()
+        self.assertAlmostEqual(solve('S7', s, t).max_delay_ms, solve('S6', s, t).max_delay_ms, places=3)
 
     def test_lp_handles_shared_downlink(self):
-        s, t = shared_downlink(), task()
-        wf = make_solver('S6', CFG).solve(s, t, 'latency')
-        lp = make_solver('S7', CFG).solve(s, t, 'latency')
-        one = single(s, t)
-        self.assertLessEqual(lp.max_delay_ms, wf.max_delay_ms + 1e-6)
-        self.assertLessEqual(lp.max_delay_ms, one.max_delay_ms + 1e-6)
+        SGL, ISL = LinkType.SGL_LEO, LinkType.ISL_LEO_LEO
+        nodes = [term('A'), term('B'), sat('g', 1.0), sat('c1', 20e12), sat('c2', 20e12), sat('d', 1.0)]
+        links = [link('A', 'g', 3, 20000, SGL), link('g', 'c1', 2, 10000, ISL), link('g', 'c2', 2, 10000, ISL),
+                 link('c1', 'd', 2, 10000, ISL), link('c2', 'd', 2, 10000, ISL), link('d', 'B', 3, 500, SGL)]
+        s, t = snap(nodes, links), task()
+        one = solve('S6', s, t, max_splits=1)
+        for name in ('S6', 'S7'):
+            self.assertLessEqual(solve(name, s, t).max_delay_ms, one.max_delay_ms + 1e-6, name)
 
     def test_no_split_when_no_benefit(self):
-        # 包很小:传输/计算时延远小于各路径传播时延差,只用最近的节点
-        s, t = independent(), task(packet=1e3)
+        # 包很小、计算极快:传输/计算时延远小于各路径传播时延差,只用最近的节点
+        s = fanout(cap=1e18)
         for name in ('S6', 'S7'):
-            a = make_solver(name, CFG).solve(s, t, 'latency')
+            a = solve(name, s, task(packet=1e3, omega=1))
             self.assertEqual(a.splits, [], name)
-            self.assertEqual(a.compute_node, 's1', name)
+            self.assertEqual(a.compute_node, 'c1', name)
 
-    def test_far_candidate_unused(self):
-        s, t = independent(), task()
-        s.get_link('A', 's3').delay_ms = 150.0      # 太远:固定时延已超过统一完成时间
-        s._adj = None
+    def test_large_overhead_prevents_split(self):
+        s, t = fanout(), task()
         for name in ('S6', 'S7'):
-            a = make_solver(name, CFG).solve(s, t, 'latency')
-            self.assertNotIn('s3', {x.node for x in a.splits}, name)
+            self.assertEqual(solve(name, s, t, overhead_s_per_Tbit=1e4).splits, [], name)
 
     def test_ledger_reserve_release_roundtrip(self):
-        s, t = independent(), task()
-        a = make_solver('S7', CFG).solve(s, t, 'latency')
-        before = ({k: l.bw_remain_mbps for k, l in s.links.items()},
-                  {k: (n.capacity_remain, n.power_remain_W) for k, n in s.nodes.items()})
-        led = ResourceLedger(CFG['algorithm'])
+        s, t = fanout(), task()
+        a = solve('S7', s, t)
+        snapshot_state = lambda: ({k: l.bw_remain_mbps for k, l in s.links.items()},
+                                  {k: (n.capacity_remain, n.power_remain_W) for k, n in s.nodes.items()})
+        before = snapshot_state()
+        led = ResourceLedger(cfg()['algorithm'])
         led.reserve(s, a)
-        used = {x.node for x in a.splits}
-        self.assertTrue(all(s.nodes[n].capacity_remain < 1e15 for n in used))
+        self.assertTrue(all(s.nodes[x.node].capacity_remain < 20e12 for x in a.splits))
         led.release(s, a)
-        after = ({k: l.bw_remain_mbps for k, l in s.links.items()},
-                 {k: (n.capacity_remain, n.power_remain_W) for k, n in s.nodes.items()})
-        self.assertEqual(before, after)
+        self.assertEqual(before, snapshot_state())
 
     def test_only_latency_strategy(self):
         with self.assertRaises(ValueError):
-            make_solver('S6', CFG).solve(independent(), task(), 'energy')
+            make_solver('S6', cfg()).solve(fanout(), task(), 'energy')
 
 
 if __name__ == '__main__':
