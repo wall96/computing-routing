@@ -23,8 +23,10 @@ class Simulator:
         self.slot = float(self.sim["slot_sec"])
         self.t_start = float(self.sim["t_start_sec"])
         self.t_end = float(self.sim["t_end_sec"])
+        # 并发上限只在 enforce_max_concurrency=true 时生效;默认超过上限也正常服务
         self.max_concurrency = int(cfg["constellation"].get(
-            "scenario_max_concurrency", {}).get(self.scenario, 0))
+            "scenario_max_concurrency", {}).get(self.scenario, 0)) \
+            if cfg["constellation"].get("enforce_max_concurrency", False) else 0
 
         self.all_nodes = self._build_nodes()
         access = [(n.id, n.lat, n.lon) for n in self.all_nodes if n.type == NodeType.ACCESS]

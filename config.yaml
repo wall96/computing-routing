@@ -30,7 +30,8 @@ constellation:
     3: [L1, L2]
   scenario_geo:    {1: false, 2: false, 3: true}
   scenario_ground: {1: none, 2: compute_only, 3: none}
-  scenario_max_concurrency: {1: 200, 2: 250, 3: 500}
+  scenario_max_concurrency: {1: 200, 2: 250, 3: 500}   # 标定到达量用的参考并发
+  enforce_max_concurrency: false   # false:超过上限也正常服务;true:达到上限拒绝新任务
   allow_cross_shell_isl: true
 
 # ===================== 地面 50 城市 =====================
@@ -135,7 +136,7 @@ energy_link_beta_J_per_bit:
 link_params:
   isl_leo_leo: {bw_mbps: 100000, loss_rate: 1.0e-6, jitter_ms: 0.1}
   isl_leo_geo: {bw_mbps: 20000, loss_rate: 1.0e-5, jitter_ms: 0.5}
-  sgl_leo:     {bw_mbps: 30000, loss_rate: 1.0e-5, jitter_ms: 1.0, min_elevation_deg: 25}
+  sgl_leo:     {bw_mbps: 30000, loss_rate: 1.0e-5, jitter_ms: 1.0, min_elevation_deg: 20}   # 20°:±55°内逐片全覆盖(最差仰角22.03°)
   sgl_geo:     {bw_mbps: 30000, loss_rate: 1.0e-5, jitter_ms: 1.0, min_elevation_deg: 5}
   ter:         {bw_mbps: 100000,loss_rate: 1.0e-7, jitter_ms: 0.05}
 
@@ -153,8 +154,8 @@ traffic:
   # satellite: 源和目的均为卫星(旧默认); ground: 固定ACCESS地面站
   endpoint_mode: terminal
   terminal:
-    lat_range_deg: [-55, 55]    # 终端纬度带(按面积均匀撒点)。L1 53° Delta 实测:带内覆盖≈99.8%
-                                # (赤道附近零星瞬时空洞),纬度60°处降至≈92%,65°以上无覆盖
+    lat_range_deg: [-55, 55]    # 终端纬度带(按面积均匀撒点)。L1 53° Delta、最小仰角20°时带内逐片全覆盖
+                                # (1°网格×120片实测,最差可见仰角22.03°);25°时赤道附近有≈0.25%瞬时空洞
     lon_range_deg: [-180, 180]
     dst_max_km:                 # 目的终端距源的大圆距离上限;未列出的业务全球均匀抽取
       LL: 2000                  # 20 ms 预算:上下行+ISL需留余量

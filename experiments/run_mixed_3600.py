@@ -85,6 +85,7 @@ def experiment_config(base,scenario,variant,out,slots=120,arrival_profile='legac
     # JSON round-trip changes scenario integer keys to strings; restore them.
     for key in ('scenario_shells','scenario_geo','scenario_ground','scenario_max_concurrency'):
         cfg['constellation'][key]={int(k):v for k,v in cfg['constellation'][key].items()}
+    cfg['constellation']['enforce_max_concurrency']=True   # 本实验按并发上限标定到达量
     cfg['simulation'].update(scenario=scenario,strategy='latency',solver='S1',
         t_start_sec=0,t_end_sec=slots*30,slot_sec=30,random_seed=42,
         event_driven_within_slot=True,event_output_dir=str(Path(out).resolve()))

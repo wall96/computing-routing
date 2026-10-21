@@ -36,6 +36,7 @@ class EventAccountingTest(unittest.TestCase):
     def test_true_arrivals_releases_cross_slot_and_horizon_energy(self):
         cfg=yaml.safe_load((Path(__file__).resolve().parents[1]/'config.yaml').read_text(encoding='utf-8'))
         cfg['traffic']['endpoint_mode']='satellite'   # 任务端点直接是 tiny_snapshot 中的卫星
+        cfg['constellation']['enforce_max_concurrency']=True
         cfg['constellation']['scenario_max_concurrency'][1]=1
         cfg['algorithm']['latency_lazy_candidates']=True
         cfg['simulation'].update(t_start_sec=0,t_end_sec=60,slot_sec=30,event_driven_within_slot=True)
