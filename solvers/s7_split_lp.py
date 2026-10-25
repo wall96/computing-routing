@@ -37,10 +37,11 @@ def solve_prefix_lp(snapshot: Snapshot, task: Task, cands: List[Cand]):
     post_e = [[set(_edges(p)) for p in c.posts] for c in cands]
     t_coef: Dict[Tuple[str, str], np.ndarray] = {}
     for k in range(m):
-        for e in isl_e[k]:
+        # 按边排序遍历:LP 常有多个等价最优解,约束顺序固定才能保证结果与哈希种子无关
+        for e in sorted(isl_e[k]):
             t_coef.setdefault(e, np.zeros(m))[k] += D
         for es in post_e[k]:
-            for e in es:
+            for e in sorted(es):
                 t_coef.setdefault(e, np.zeros(m))[k] += D * rho
     for e, coef in t_coef.items():
         coef *= 1000.0 / (snapshot.get_link(*e).bw_total_mbps * 1e6)

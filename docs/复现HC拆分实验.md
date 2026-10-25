@@ -9,7 +9,7 @@
 | Python | 3.9 及以上（已在 3.9.6 上验证） |
 | 依赖 | 见 [requirements.txt](../requirements.txt)，版本已固定 |
 | 系统 | macOS 或 Linux。无需 GPU |
-| 耗时 | 单独求解约 30 s；完整仿真约 17 分钟（S7 约占 8 分钟） |
+| 耗时 | 单独求解约 30 s；完整仿真约 10 分钟（S7 约占 5 分钟）。求解耗时随机器而变 |
 
 ```bash
 git clone https://github.com/wall96/computing-routing.git
@@ -49,7 +49,7 @@ pip install -r requirements.txt
 python3 experiments/run_hc_split.py --scenario 1 --t-end 3600 --out results/hc_split_check --skip-sim
 ```
 
-### 3.2 完整实验（约 17 分钟）
+### 3.2 完整实验（约 10 分钟）
 
 ```bash
 python3 experiments/run_hc_split.py --scenario 1 --t-end 3600 --out results/hc_split_D500_w1000
