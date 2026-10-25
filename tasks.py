@@ -139,11 +139,29 @@ class TaskGenerator:
 
     def _terminal_endpoints(self, biz: str, bc: dict):
         src = self._random_ground_point()
+        tcfg = self.cfg.get("terminal", {})
         k = int(bc.get("k_dst", 3)) if biz == "MC" else 1
-        max_km = self.cfg.get("terminal", {}).get("dst_max_km", {}).get(biz)
-        dsts = [self._random_point_near(src, float(max_km)) if max_km
-                else self._random_ground_point() for _ in range(k)]
+        max_km = tcfg.get("dst_max_km", {}).get(biz)
+        cluster_km = tcfg.get("mc_cluster_radius_km") if k > 1 else None
+        if cluster_km:
+            # 多目的成簇:先取簇中心,再在簇半径内撒 k 个目的终端
+            center = (self._random_point_near(src, float(max_km)) if max_km
+                      else self._random_ground_point())
+            dsts = [self._random_point_near(center, float(cluster_km)) for _ in range(k)]
+        else:
+            dsts = [self._random_point_near(src, float(max_km)) if max_km
+                    else self._random_ground_point() for _ in range(k)]
         return src, dsts
+
+    def _packet_bits(self, bc: dict) -> float:
+        """包模型的业务包大小 D(bit);未配置 packet_bits 时为 0(流式模型)。独立随机流。"""
+        rng_cfg = bc.get("packet_bits")
+        if not rng_cfg:
+            return 0.0
+        if not hasattr(self, "_pkt_rng"):
+            self._pkt_rng = random.Random(self.cfg.get("packet_seed", 2042))
+        lo, hi = rng_cfg
+        return self._pkt_rng.uniform(float(lo), float(hi))
 
     def _new_id(self, biz):
         self._counter += 1
@@ -250,6 +268,7 @@ class TaskGenerator:
                     cycles_total=data_bits * omega_eff, data_volume_bits=data_bits,
                     compute_rate=rate * 1e6 * omega_eff,   # equivalent op/s
                     src_coord=src_coord, dst_coords=dst_coords,
+                    packet_bits=self._packet_bits(bc),
                 ))
                 self.duration_adjustments.append(dict(task_id=task_id,biz=biz_str,
                     arrival_t=arrival,sampled_duration_s=sampled_duration,

@@ -110,6 +110,9 @@ class Task:
     # terminal 端点模式:源/目的终端地理坐标 (lat, lon),每片据此重算卫星覆盖
     src_coord: Optional[Tuple[float, float]] = None
     dst_coords: Optional[List[Tuple[float, float]]] = None
+    # 包模型(方案B):一个业务数据包大小 D(bit)。>0 时时延 = 传播 + 传输(D/速率) + 计算(∝D);
+    # 0 表示旧的流式模型(只算传播 + 单块 Lref 计算)
+    packet_bits: float = 0.0
 
     @property
     def rate_bps(self) -> float:
@@ -130,9 +133,22 @@ class Task:
 
 
 @dataclass
+class SubAlloc:
+    """拆分后的一个子包:比例 share 的数据走 path_pre 到 node 计算,再经 path_post 到各目的。"""
+    node: str
+    share: float
+    path_pre: List[str]
+    path_post: List[List[str]]
+    compute_rate_used: float = 0.0
+    power_used_W: float = 0.0
+    compute_latency_ms: float = 0.0
+    finish_ms: float = 0.0                # 该子包到达最远目的的时刻(相对发出)
+
+
+@dataclass
 class Allocation:
     task: Task
-    compute_node: str                     # v*
+    compute_node: str                     # v*(拆分时为份额最大的节点)
     path_pre: List[str]                   # src → v*  (载 D0)
     path_post: List[List[str]]            # v* → 各 dst (载 D0ρ)
     bw_per_link: Dict[Tuple[str, str], float]
@@ -152,11 +168,24 @@ class Allocation:
     max_delay_ms: float = 0.0             # 实际端到端时延(含 t_compute)
     max_loss: float = 0.0                 # 实际累乘丢包
     allocation_id: str = ""                # 本次分配唯一 ID（迁移后生成新 ID）
+    splits: List[SubAlloc] = field(default_factory=list)   # 空 = 不拆分(单节点)
     _preempted: bool = False
 
     @property
     def paths(self) -> List[List[str]]:
+        if self.splits:
+            return [p for s in self.splits for p in [s.path_pre] + s.path_post]
         return [self.path_pre] + self.path_post
+
+    def node_loads(self) -> Dict[str, Tuple[float, float]]:
+        """各算力节点占用 {node: (算力 op/s, 功率 W)}。"""
+        if not self.splits:
+            return {self.compute_node: (self.compute_rate_used, self.power_used_W)}
+        out: Dict[str, Tuple[float, float]] = {}
+        for s in self.splits:
+            c, p = out.get(s.node, (0.0, 0.0))
+            out[s.node] = (c + s.compute_rate_used, p + s.power_used_W)
+        return out
 
     @property
     def energy_total_J(self) -> float:

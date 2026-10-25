@@ -36,6 +36,7 @@ def derived_seed(master,scenario,stream):
 def restore_keys(cfg):
     for key in ('scenario_shells','scenario_geo','scenario_ground','scenario_max_concurrency'):
         cfg['constellation'][key]={int(k):v for k,v in cfg['constellation'][key].items()}
+    cfg['constellation']['enforce_max_concurrency']=True   # 本实验按并发上限标定到达量
     cfg['traffic']['fixed_arrival_overrides']={int(k):v for k,v in cfg['traffic']['fixed_arrival_overrides'].items()}
     return cfg
 

@@ -18,15 +18,18 @@ class ResourceLedger:
     def _link_roles(self, alloc: Allocation, u: str, v: str) -> str:
         key = (u, v) if u < v else (v, u)
         roles = []
-        for a, b in zip(alloc.path_pre[:-1], alloc.path_pre[1:]):
-            if ((a, b) if a < b else (b, a)) == key:
-                roles.append("PRE")
-                break
-        for i, path in enumerate(alloc.path_post):
-            for a, b in zip(path[:-1], path[1:]):
+        segs = ([(f"S{k}:", s.path_pre, s.path_post) for k, s in enumerate(alloc.splits)]
+                if alloc.splits else [("", alloc.path_pre, alloc.path_post)])
+        for tag, pre, posts in segs:
+            for a, b in zip(pre[:-1], pre[1:]):
                 if ((a, b) if a < b else (b, a)) == key:
-                    roles.append(f"POST:{i}")
+                    roles.append(f"{tag}PRE")
                     break
+            for i, path in enumerate(posts):
+                for a, b in zip(path[:-1], path[1:]):
+                    if ((a, b) if a < b else (b, a)) == key:
+                        roles.append(f"{tag}POST:{i}")
+                        break
         return ";".join(roles)
 
     def _emit(self, snapshot: Snapshot, alloc: Allocation, event: str,
@@ -67,18 +70,20 @@ class ResourceLedger:
                 self._emit(snapshot, alloc, event, "BANDWIDTH", f"{u}<->{v}", bw,
                            "Mbps", lk.bw_total_mbps, before, lk.bw_remain_mbps,
                            link=lk, t_now=t_now)
-        node = snapshot.nodes.get(alloc.compute_node)
-        if node is not None:
+        for nid, (rate, power) in alloc.node_loads().items():
+            node = snapshot.nodes.get(nid)
+            if node is None:
+                continue
             before = node.capacity_remain
-            node.capacity_remain -= alloc.compute_rate_used
+            node.capacity_remain -= rate
             self._emit(snapshot, alloc, event, "COMPUTE", node.id,
-                       alloc.compute_rate_used, "cycle/s", node.capacity_total,
+                       rate, "cycle/s", node.capacity_total,
                        before, node.capacity_remain, node=node, t_now=t_now)
             if self.enforce_energy:
                 before_power = node.power_remain_W
-                node.power_remain_W -= alloc.power_used_W
+                node.power_remain_W -= power
                 self._emit(snapshot, alloc, event, "POWER", node.id,
-                           alloc.power_used_W, "W", node.power_budget_W,
+                           power, "W", node.power_budget_W,
                            before_power, node.power_remain_W, node=node, t_now=t_now)
         if track:
             self.active.append(alloc)
@@ -93,20 +98,20 @@ class ResourceLedger:
                 self._emit(snapshot, alloc, event, "BANDWIDTH", f"{u}<->{v}", -bw,
                            "Mbps", lk.bw_total_mbps, before, lk.bw_remain_mbps,
                            link=lk, t_now=t_now)
-        node = snapshot.nodes.get(alloc.compute_node)
-        if node is not None:
+        for nid, (rate, power) in alloc.node_loads().items():
+            node = snapshot.nodes.get(nid)
+            if node is None:
+                continue
             before = node.capacity_remain
-            node.capacity_remain = min(node.capacity_total,
-                                       node.capacity_remain + alloc.compute_rate_used)
+            node.capacity_remain = min(node.capacity_total, node.capacity_remain + rate)
             self._emit(snapshot, alloc, event, "COMPUTE", node.id,
-                       -alloc.compute_rate_used, "cycle/s", node.capacity_total,
+                       -rate, "cycle/s", node.capacity_total,
                        before, node.capacity_remain, node=node, t_now=t_now)
             if self.enforce_energy:
                 before_power = node.power_remain_W
-                node.power_remain_W = min(node.power_budget_W,
-                                          node.power_remain_W + alloc.power_used_W)
+                node.power_remain_W = min(node.power_budget_W, node.power_remain_W + power)
                 self._emit(snapshot, alloc, event, "POWER", node.id,
-                           -alloc.power_used_W, "W", node.power_budget_W,
+                           -power, "W", node.power_budget_W,
                            before_power, node.power_remain_W, node=node, t_now=t_now)
         if alloc in self.active:
             self.active.remove(alloc)
@@ -138,11 +143,12 @@ class ResourceLedger:
             lk = snapshot.get_link(u, v)
             if lk is None or not lk.alive or lk.bw_remain_mbps < bw:
                 return False
-        node = snapshot.nodes.get(alloc.compute_node)
-        if node is None or node.capacity_remain < alloc.compute_rate_used:
-            return False
-        if self.enforce_energy and node.power_remain_W < alloc.power_used_W:
-            return False
+        for nid, (rate, power) in alloc.node_loads().items():
+            node = snapshot.nodes.get(nid)
+            if node is None or node.capacity_remain < rate:
+                return False
+            if self.enforce_energy and node.power_remain_W < power:
+                return False
         return True
 
     # ---------- 抢占:高优先级抢低 ----------

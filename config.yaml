@@ -30,7 +30,8 @@ constellation:
     3: [L1, L2]
   scenario_geo:    {1: false, 2: false, 3: true}
   scenario_ground: {1: none, 2: compute_only, 3: none}
-  scenario_max_concurrency: {1: 200, 2: 250, 3: 500}
+  scenario_max_concurrency: {1: 200, 2: 250, 3: 500}   # 标定到达量用的参考并发
+  enforce_max_concurrency: false   # false:超过上限也正常服务;true:达到上限拒绝新任务
   allow_cross_shell_isl: true
 
 # ===================== 地面 50 城市 =====================
@@ -95,9 +96,12 @@ ground:
 # 统一按低精度 Tensor 等效吞吐标定，不与 FP32/FP64 峰值混用。
 # LEO≈单个低功耗AI模块；GEO≈多模块；EDGE≈4卡推理服务器；DC≈单台8卡AI服务器。
 # 与下面 η、功率上限联合标定：Pmax = η × Cmax。
+# 写成 [lo, hi] 表示每颗星在区间内独立均匀抽取(compute_capacity_seed 固定),
+# 该星功率上限随之按 Pmax = η × Cmax 给出,compute_power_budget_W 中对应项不再使用。
+compute_capacity_seed: 7
 compute_capacity_tflops:
-  LEO:    400       # 用户区间300~500的中值
-  GEO:    1350      # 用户区间1200~1500的中值
+  LEO:    [10, 20]        # 每颗 LEO 10~20 TFLOPS 随机分布(原 400 的 1/40~1/20)
+  GEO:    [33.75, 67.5]   # 按 LEO 同比例缩减:原 1350 的 1/40~1/20,每颗随机
   EDGE:   6000      # 约4×1466 Tensor TFLOPS
   DC:     32000     # 约1台DGX H100的32 PFLOPS FP8
   ACCESS: 0
@@ -127,11 +131,13 @@ energy_link_beta_J_per_bit:
   SGL_GEO:      1.2e-7
 
 # ===================== 链路参数(标称) =====================
+# 按 HC 1~10 Gbps 标定:SGL 低仰角只剩 sgl_rate_floor=0.4,标称 30 Gbps → 最差仍有 12 Gbps;
+# ISL 取激光链路量级 100 Gbps(远距离下限 0.7 → 70 Gbps)。
 link_params:
-  isl_leo_leo: {bw_mbps: 10000, loss_rate: 1.0e-6, jitter_ms: 0.1}
-  isl_leo_geo: {bw_mbps: 2000,  loss_rate: 1.0e-5, jitter_ms: 0.5}
-  sgl_leo:     {bw_mbps: 1000,  loss_rate: 1.0e-5, jitter_ms: 1.0, min_elevation_deg: 25}
-  sgl_geo:     {bw_mbps: 1000,  loss_rate: 1.0e-5, jitter_ms: 1.0, min_elevation_deg: 5}
+  isl_leo_leo: {bw_mbps: 100000, loss_rate: 1.0e-6, jitter_ms: 0.1}
+  isl_leo_geo: {bw_mbps: 20000, loss_rate: 1.0e-5, jitter_ms: 0.5}
+  sgl_leo:     {bw_mbps: 30000, loss_rate: 1.0e-5, jitter_ms: 1.0, min_elevation_deg: 20}   # 20°:±55°内逐片全覆盖(最差仰角22.03°)
+  sgl_geo:     {bw_mbps: 30000, loss_rate: 1.0e-5, jitter_ms: 1.0, min_elevation_deg: 5}
   ter:         {bw_mbps: 100000,loss_rate: 1.0e-7, jitter_ms: 0.05}
 
 # ===================== 时变信道(C3) =====================
@@ -148,12 +154,13 @@ traffic:
   # satellite: 源和目的均为卫星(旧默认); ground: 固定ACCESS地面站
   endpoint_mode: terminal
   terminal:
-    lat_range_deg: [-55, 55]    # 终端纬度带(按面积均匀撒点)。L1 53° Delta 实测:带内覆盖≈99.8%
-                                # (赤道附近零星瞬时空洞),纬度60°处降至≈92%,65°以上无覆盖
+    lat_range_deg: [-55, 55]    # 终端纬度带(按面积均匀撒点)。L1 53° Delta、最小仰角20°时带内逐片全覆盖
+                                # (1°网格×120片实测,最差可见仰角22.03°);25°时赤道附近有≈0.25%瞬时空洞
     lon_range_deg: [-180, 180]
     dst_max_km:                 # 目的终端距源的大圆距离上限;未列出的业务全球均匀抽取
       LL: 2000                  # 20 ms 预算:上下行+ISL需留余量
       HR: 5000
+    mc_cluster_radius_km: 300   # MC 多目的成簇:先取簇中心,再在该半径内撒目的终端
   endpoint_types_by_biz:        # 仅satellite模式:场景3中GEO不能作为LL源或目的
     LL: [LEO]
     HR: [LEO, GEO]
@@ -167,12 +174,14 @@ traffic:
     - {from: 42,  to: 1000, mult: 0.6}
   qos:
     # 基础计算量 + 多目的附加计算量；固定开销按处理块/帧计。
+    # packet_bits:包模型的业务包大小D范围(bit),每任务独立均匀抽取(packet_seed)。
+    #   时延 = 传播 + 传输(D/链路速率,直通转发取瓶颈) + 计算(固定开销 + x·D·ω/C)。
+    #   删除 packet_bits 即回到旧流式模型(只算传播 + 单块Lref计算)。
     # satellite模式下，dst_knn表示当前快照中按最短传播时延排序的最近N颗可达卫星(terminal模式忽略)。
-    LL: {priority: 1, mode: burst,   delay_ms: 20,  loss: 0.01,   rate_mbps: [2, 10],    duration_s: [60, 300],   compression_rho: 0.10, processing_logic: low_latency_filter,              cycles_per_bit_base: 50,   cycles_per_bit_per_dst: 0,  fixed_processing_ms: 0.05, fixed_processing_ms_per_dst: 0,    Lref_bits: 12000,   dst_knn: 5}
-    HR: {priority: 2, mode: burst,   delay_ms: 200, loss: 2.0e-4, rate_kbps: [10, 100],  duration_s: [120, 600],  compression_rho: 0.33, processing_logic: reliable_codec,                 cycles_per_bit_base: 200,  cycles_per_bit_per_dst: 0,  fixed_processing_ms: 0.10, fixed_processing_ms_per_dst: 0,    Lref_bits: 8000,    dst_knn: 10}
-    HC: {priority: 3, mode: persist, delay_ms: 200, loss: 0.01,   rate_mbps: [100, 500], duration_s: [600, 1800], compression_rho: 0.20, processing_logic: heavy_content_codec,            cycles_per_bit_base: 1000, cycles_per_bit_per_dst: 0,  fixed_processing_ms: 1.00, fixed_processing_ms_per_dst: 0,    Lref_bits: 1000000}
-    MC: {priority: 4, mode: persist, delay_ms: 200, loss: 0.01,   rate_kbps: [10, 100],  duration_s: [600, 1800], compression_rho: 0.05, processing_logic: multicast_aggregate_replicate, cycles_per_bit_base: 40,   cycles_per_bit_per_dst: 15, fixed_processing_ms: 0.10, fixed_processing_ms_per_dst: 0.02, Lref_bits: 12000,   k_dst: 3}
-
+    LL: {priority: 1, mode: burst,   delay_ms: 20,  loss: 0.01,   rate_mbps: [2, 10],    duration_s: [60, 300],   compression_rho: 0.10, processing_logic: low_latency_filter,              cycles_per_bit_base: 50,   cycles_per_bit_per_dst: 0,  fixed_processing_ms: 0.05, fixed_processing_ms_per_dst: 0,    Lref_bits: 12000,   dst_knn: 5, packet_bits: [500000, 2000000]}
+    HR: {priority: 2, mode: burst,   delay_ms: 200, loss: 2.0e-4, rate_kbps: [10, 100],  duration_s: [120, 600],  compression_rho: 0.33, processing_logic: reliable_codec,                 cycles_per_bit_base: 200,  cycles_per_bit_per_dst: 0,  fixed_processing_ms: 0.10, fixed_processing_ms_per_dst: 0,    Lref_bits: 8000,    dst_knn: 10, packet_bits: [100000, 500000]}
+    HC: {priority: 3, mode: persist, delay_ms: 200, loss: 0.01,   rate_mbps: [1000, 10000], duration_s: [600, 1800], compression_rho: 0.20, processing_logic: heavy_content_codec,            cycles_per_bit_base: 1000, cycles_per_bit_per_dst: 0,  fixed_processing_ms: 1.00, fixed_processing_ms_per_dst: 0,    Lref_bits: 1000000, packet_bits: [500000000, 500000000]}
+    MC: {priority: 4, mode: persist, delay_ms: 200, loss: 0.01,   rate_kbps: [10, 100],  duration_s: [600, 1800], compression_rho: 0.05, processing_logic: multicast_aggregate_replicate, cycles_per_bit_base: 40,   cycles_per_bit_per_dst: 15, fixed_processing_ms: 0.10, fixed_processing_ms_per_dst: 0.02, Lref_bits: 12000,   k_dst: 3, packet_bits: [200000, 1000000]}
 # ===================== 算法参数 =====================
 algorithm:
   load_balance_k: 4              # 旧接口参数；S1的balance现采用分配后平方利用率增量
@@ -185,4 +194,11 @@ algorithm:
   ksp_K: 3                       # S2 Yen 的 K
   larac_max_iter: 20             # S3 迭代上限
   aco: {ants: 8, iters: 8, alpha: 1.0, beta: 2.0, evap: 0.3, q: 1.0}
+  split:                         # S6/S7 拆分卸载:终端不能拆,整包上行到接入卫星后在星上拆分
+    max_splits: 0                # 子包数上限;0=不限(由算法按收益决定),1=不拆分(单节点基线)
+    overhead_s_per_Tbit: 0.01    # 拆分开销 ∝ 包大小:1 Tbit 拆分耗时 0.01 s
+    min_gain_ms: 0.0             # 拆分比不拆分至少快这么多才拆
+    max_access: 3                # 候选拆分点:上行最快的前 N 颗覆盖卫星
+    lp_max_candidates: 12        # S7 每任务参与 LP 的候选数上限(按固定时延 d 升序)
+    lp_per_uplink: 2             # S7 每条上行星地链路最多保留的候选数
   milp: {max_nodes: 80, max_tasks_per_slot: 15}   # S5 仅小规模

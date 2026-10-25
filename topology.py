@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 import math
+import random
 from typing import Dict, List
 import numpy as np
 
@@ -45,7 +46,21 @@ def _make_sat(sid, shell, plane, s_idx, a_m, inc, raan, M0, n,
     )
 
 
-def build_shell(shell_cfg: dict, cap_tflops: float, eta: float, power_budget: float) -> List[Node]:
+def sample_capacity(cap_tflops, eta: float, power_budget: float, rng) -> tuple:
+    """单颗星算力(op/s)与功率上限(W)。
+
+    cap_tflops 为数值:所有星相同,功率取配置值;
+    为 [lo, hi]:每颗星独立均匀抽取,功率上限按 Pmax = η × Cmax 随算力同比例给出。
+    """
+    if isinstance(cap_tflops, (list, tuple)):
+        lo, hi = cap_tflops
+        cap = rng.uniform(float(lo), float(hi)) * TFLOPS_TO_CPS
+        return cap, eta * cap
+    return float(cap_tflops) * TFLOPS_TO_CPS, power_budget
+
+
+def build_shell(shell_cfg: dict, cap_tflops, eta: float, power_budget: float,
+                rng=None) -> List[Node]:
     """一个壳层的 Walker 星座 i:T/P/F(全量,不缩比)。
 
     pattern=delta(默认):RAAN 在 [0,360) 均布,Ω_p = 2πp/P,适合倾斜轨道;
@@ -63,7 +78,8 @@ def build_shell(shell_cfg: dict, cap_tflops: float, eta: float, power_budget: fl
     inc = _deg2rad(shell_cfg["inc_deg"])
     a = R_EARTH_M + shell_cfg["alt_km"] * 1000.0
     n = math.sqrt(MU_EARTH / (a ** 3))
-    cap_cps = cap_tflops * TFLOPS_TO_CPS
+    if rng is None:
+        rng = random.Random(0)
 
     nodes: List[Node] = []
     total = planes * per_plane
@@ -72,22 +88,25 @@ def build_shell(shell_cfg: dict, cap_tflops: float, eta: float, power_budget: fl
         for s in range(per_plane):
             M0 = (2 * math.pi * s / per_plane + 2 * math.pi * phase_F * p / total) % (2 * math.pi)
             sid = f"{name}-{p:02d}-{s:02d}"
+            cap_cps, pb = sample_capacity(cap_tflops, eta, power_budget, rng)
             nodes.append(_make_sat(sid, name, p, s, a, inc, raan, M0, n,
-                                   cap_cps, eta, NodeType.LEO, power_budget))
+                                   cap_cps, eta, NodeType.LEO, pb))
     return nodes
 
 
-def build_geo(longitudes_deg: List[float], cap_tflops: float, eta: float,
-              power_budget: float) -> List[Node]:
+def build_geo(longitudes_deg: List[float], cap_tflops, eta: float,
+              power_budget: float, rng=None) -> List[Node]:
     GEO_ALT_M = 35_786_000.0
     a = R_EARTH_M + GEO_ALT_M
     n = math.sqrt(MU_EARTH / (a ** 3))
-    cap_cps = cap_tflops * TFLOPS_TO_CPS
+    if rng is None:
+        rng = random.Random(0)
     out = []
     for i, lon in enumerate(longitudes_deg):
         raan = _deg2rad(lon); M0 = 0.0
+        cap_cps, pb = sample_capacity(cap_tflops, eta, power_budget, rng)
         out.append(_make_sat(f"GEO-{i:02d}", "GEO", -1, i, a, 0.0, raan, M0, n,
-                             cap_cps, eta, NodeType.GEO, power_budget))
+                             cap_cps, eta, NodeType.GEO, pb))
     return out
 
 

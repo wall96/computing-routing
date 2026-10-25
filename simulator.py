@@ -1,5 +1,6 @@
 """主仿真循环:时间片驱动 + 任务调度 + 资源簿记 + KPI(《设计文档》§10)。"""
 from __future__ import annotations
+import random
 import time
 from typing import List, Optional
 
@@ -22,8 +23,10 @@ class Simulator:
         self.slot = float(self.sim["slot_sec"])
         self.t_start = float(self.sim["t_start_sec"])
         self.t_end = float(self.sim["t_end_sec"])
+        # 并发上限只在 enforce_max_concurrency=true 时生效;默认超过上限也正常服务
         self.max_concurrency = int(cfg["constellation"].get(
-            "scenario_max_concurrency", {}).get(self.scenario, 0))
+            "scenario_max_concurrency", {}).get(self.scenario, 0)) \
+            if cfg["constellation"].get("enforce_max_concurrency", False) else 0
 
         self.all_nodes = self._build_nodes()
         access = [(n.id, n.lat, n.lon) for n in self.all_nodes if n.type == NodeType.ACCESS]
@@ -43,10 +46,12 @@ class Simulator:
         eta = self.cfg["energy_compute_eta_J_per_cycle"]
         pw = self.cfg["compute_power_budget_W"]
         nodes: List[Node] = []
+        # 星上算力为区间时每颗星独立抽取;独立随机流,不影响任务生成
+        cap_rng = random.Random(int(self.cfg.get("compute_capacity_seed", 7)))
         for shell in self.cfg["constellation"]["shells"]:
-            nodes += build_shell(shell, cap["LEO"], eta["LEO"], pw["LEO"])
+            nodes += build_shell(shell, cap["LEO"], eta["LEO"], pw["LEO"], rng=cap_rng)
         geo = self.cfg["constellation"]["geo"]
-        nodes += build_geo(geo["longitudes_deg"], cap["GEO"], eta["GEO"], pw["GEO"])
+        nodes += build_geo(geo["longitudes_deg"], cap["GEO"], eta["GEO"], pw["GEO"], rng=cap_rng)
         nodes += build_ground(self.cfg["ground"]["stations"], cap, eta, pw)
         return nodes
 

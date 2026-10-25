@@ -30,6 +30,15 @@ pip install -r requirements.txt      # numpy, PyYAML, pulp(仅 S5 需要)
 | S3 | LARAC 约束最短路 | 时延约束下最小代价 |
 | S4 | 蚁群 ACO | 全局搜索(较慢) |
 | S5 | MILP 精确 | 小规模最优参照(需 pulp) |
+| S6 | 拆分卸载:等完成时间注水法 | 包拆成多个子包并行计算,min 最晚子包到达;仅 latency |
+| S7 | 拆分卸载:按 τ 分段线性规划 | 同 S6 目标,显式建模子包共用链路(需 scipy);仅 latency |
+
+包模型:`traffic.qos.<业务>.packet_bits` 给出业务包大小 D。时延 = 传播 + 传输(D/链路速率,直通转发取瓶颈) + 计算(固定开销 + x·D·ω/C),拆分后子包按比例 x 缩小传输与计算部分,整包时延取最晚子包。`algorithm.split.max_splits=1` 即不拆分的单节点基线。对比实验:`python experiments/run_split_compare.py`。
+
+## 文档
+- [算法说明](docs/算法说明.md)：公共时延模型、S0～S5 单节点算法、S6/S7 星上拆分算法
+- [复现 HC 拆分实验](docs/复现HC拆分实验.md)：环境、参数、运行命令、预期结果
+- [HC 拆分实验报告](docs/HC拆分实验报告.md)
 
 ## 运行
 ```bash

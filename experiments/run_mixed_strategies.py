@@ -168,6 +168,7 @@ def run(strategy,sc,out,baseline):
     cfg=json.loads((source/'effective_config.json').read_text(encoding='utf-8'))
     for key in ('scenario_shells','scenario_geo','scenario_ground','scenario_max_concurrency'):
         cfg['constellation'][key]={int(k):v for k,v in cfg['constellation'][key].items()}
+    cfg['constellation']['enforce_max_concurrency']=True   # 本实验按并发上限标定到达量
     cfg['simulation'].update(strategy=strategy,event_output_dir=str(path.resolve()))
     (path/'effective_config.json').write_text(json.dumps(cfg,ensure_ascii=False,indent=2),encoding='utf-8')
     schedule_source=source/'arrival_schedule.csv'
