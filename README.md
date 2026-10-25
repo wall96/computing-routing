@@ -35,6 +35,11 @@ pip install -r requirements.txt      # numpy, PyYAML, pulp(仅 S5 需要)
 
 包模型:`traffic.qos.<业务>.packet_bits` 给出业务包大小 D。时延 = 传播 + 传输(D/链路速率,直通转发取瓶颈) + 计算(固定开销 + x·D·ω/C),拆分后子包按比例 x 缩小传输与计算部分,整包时延取最晚子包。`algorithm.split.max_splits=1` 即不拆分的单节点基线。对比实验:`python experiments/run_split_compare.py`。
 
+## 文档
+- [算法说明](docs/算法说明.md)：公共时延模型、S0～S5 单节点算法、S6/S7 星上拆分算法
+- [复现 HC 拆分实验](docs/复现HC拆分实验.md)：环境、参数、运行命令、预期结果
+- [HC 拆分实验报告](docs/HC拆分实验报告.md)
+
 ## 运行
 ```bash
 # 单次:场景3 + 能耗策略 + LARAC(星座始终全量,场景3为 1000 LEO + 6 GEO)
